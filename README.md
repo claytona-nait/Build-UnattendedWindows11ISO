@@ -10,7 +10,23 @@ UEFI and BIOS boot configuration a Windows install media needs.
 |---|---|
 | `Build-UnattendedWindows11ISO.ps1` | The signed script. Last code change 2025-11-02 |
 
-Usage, from the folder:
+## Getting the source folder
+
+The script needs the ISO's contents unpacked into a plain folder. Windows can mount an ISO
+but will not copy it out as a folder in one step, so the simplest route is an archive tool
+that reads ISO images directly, such as [7-Zip](https://www.7-zip.org/), PeaZip or WinRAR:
+
+1. Right-click the Windows 11 ISO and extract it to a folder next to the script.
+2. Rename the extracted folder to `Windows11`, with no spaces. 7-Zip names it after the
+   ISO, which is usually something like `Win11_24H2_English_x64`.
+3. Drop your `autounattend.xml` into the root of that `Windows11` folder.
+
+With the folder named `Windows11` the script's defaults line up and it runs with no
+parameters. Any other folder name works too, you just pass it with `-UnpackedFolderPath`.
+
+## Usage
+
+From the folder:
 
 ```powershell
 .\Build-UnattendedWindows11ISO.ps1 -UnpackedFolderPath 'C:\Win11Files' -OutputISOPath 'C:\Win11-Unattended.iso'
