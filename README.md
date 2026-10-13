@@ -8,7 +8,7 @@ UEFI and BIOS boot configuration a Windows install media needs.
 
 | File | What it is |
 |---|---|
-| `Build-UnattendedWindows11ISO.ps1` | The signed script. Last code change 2025-11-02 |
+| `Build-UnattendedWindows11ISO.ps1` | The signed script. Last code change 2026-10-13 |
 
 ## Getting the source folder
 
@@ -23,6 +23,30 @@ that reads ISO images directly, such as [7-Zip](https://www.7-zip.org/), PeaZip 
 
 With the folder named `Windows11` the script's defaults line up and it runs with no
 parameters. Any other folder name works too, you just pass it with `-UnpackedFolderPath`.
+
+## Boot files
+
+The script does not ship any boot code of its own. It points `oscdimg` at files that are
+already inside the extracted ISO, and checks they exist before it starts:
+
+| File | Path inside `Windows11` | Role |
+|---|---|---|
+| `efisys_noprompt.bin` | `efi\microsoft\boot\efisys_noprompt.bin` | UEFI boot image with no "Press any key" prompt. Used when present |
+| `efisys.bin` | `efi\microsoft\boot\efisys.bin` | Standard UEFI boot image. Fallback, with a warning, if the no-prompt one is missing |
+| `etfsboot.com` | `boot\etfsboot.com` | Legacy BIOS boot sector, kept so the ISO also boots on older firmware |
+
+`efisys.bin` is the small FAT image holding the UEFI bootloader, and it is the file
+Microsoft's own `-bootdata` example uses. See the
+[oscdimg command-line options](https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/oscdimg-command-line-options)
+on Microsoft Learn for what each flag does. Microsoft ships both variants in every
+Windows ISO. The only difference is that `efisys_noprompt.bin` skips the "Press any key
+to boot from CD or DVD" message, which is the step that would otherwise stall a hands-off
+install. The script picks the no-prompt variant automatically, so there is nothing to
+rename. If you ever build with `oscdimg` by hand, the equivalent is to copy
+`efisys_noprompt.bin` over `efisys.bin` before running it.
+
+The trade-off is that a no-prompt ISO left in a VM's virtual drive will reinstall on the
+next reboot without asking, so detach the media once the install is going.
 
 ## Usage
 
