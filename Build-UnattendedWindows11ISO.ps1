@@ -3,49 +3,44 @@
 Creates a bootable Windows ISO from an unpacked installation source, ensuring required files exist and downloading oscdimg.exe if necessary.
 
 .DESCRIPTION
-This script automates the creation of a bootable Windows ISO image from an unpacked Windows installation folder. 
-It validates that the source folder contains the required files (`install.wim` and `boot.wim`), downloads `oscdimg.exe` 
-from Microsoft if it is not available locally, and then uses `oscdimg.exe` to generate the ISO with proper boot configuration.
+This script automates the creation of a bootable Windows ISO image from an unpacked Windows installation folder.
+It validates that the source folder contains the installer images (`sources\install.wim` and `sources\boot.wim`) and the
+boot files oscdimg needs (`boot\etfsboot.com` for BIOS and `efi\microsoft\boot\efisys.bin` for UEFI), downloads
+`oscdimg.exe` from Microsoft if it is not available locally, and then uses `oscdimg.exe` to generate the ISO.
+
+Because the output is meant to be an unattended installer, the script prefers `efisys_noprompt.bin` for the UEFI boot
+image when the source folder has one. That removes the "Press any key to boot from CD or DVD" prompt, so the install
+starts without anyone at the keyboard. If only `efisys.bin` is present it is used instead and a warning is written.
 
 .PARAMETER UnpackedFolderPath
-Specifies the path to the unpacked Windows installation files. 
-The folder must contain `sources\install.wim` and `sources\boot.wim`. 
+Specifies the path to the unpacked Windows installation files.
+The folder must contain `sources\install.wim`, `sources\boot.wim`, `boot\etfsboot.com` and either
+`efi\microsoft\boot\efisys_noprompt.bin` or `efi\microsoft\boot\efisys.bin`.
 Default: .\Windows11
 
 .PARAMETER OutputISOPath
-Specifies the path and filename for the generated ISO image. 
+Specifies the path and filename for the generated ISO image.
 Default: .\Windows11-Unattended.iso
 
 .PARAMETER localOSCDPath
-Specifies the local path to `oscdimg.exe`. If the file does not exist, it will be downloaded automatically. 
+Specifies the local path to `oscdimg.exe`. If the file does not exist, it will be downloaded automatically.
 Default: .\oscdimg.exe
 
 .EXAMPLE
-PS> .\Create-WindowsISO.ps1 -UnpackedFolderPath "C:\Win11Files" -OutputISOPath "C:\Win11-Unattended.iso"
+PS> .\Build-UnattendedWindows11ISO.ps1 -UnpackedFolderPath "C:\Win11Files" -OutputISOPath "C:\Win11-Unattended.iso"
 Creates a bootable Windows 11 ISO from the unpacked files located in `C:\Win11Files` and saves it as `C:\Win11-Unattended.iso`.
 
 .EXAMPLE
-PS> .\Create-WindowsISO.ps1
+PS> .\Build-UnattendedWindows11ISO.ps1
 Uses default paths to create a bootable Windows 11 ISO from the `.\Windows11` folder and saves it as `.\Windows11-Unattended.iso`.
 
 .NOTES
 Author: Clayton Amelia
-Version: 1.2.27
+Version: 1.3.0
 Requires: PowerShell 5.1 or later, Internet access (if oscdimg.exe needs to be downloaded)
 #>
 param (
     [Parameter(Position=0)]
-    [ValidateScript({
-        if (Test-Path $_) {
-            if (Test-Path $(Join-Path -Path $Path -ChildPath "sources\install.wim") -and Test-Path $(Join-Path -Path $Path -ChildPath "sources\boot.wim")) {
-                return $true
-            } else {
-                Throw "`r`nUnable to locate 'sources\install.wim' and 'sources\boot.wim' in $_"
-            }
-        } else {
-            Throw "`r`nUnpacked ISO path does not exist $_ does not exist"
-        }
-    })]
     [string]
     $UnpackedFolderPath = ".\Windows11",
 
@@ -53,16 +48,51 @@ param (
     [string]
     $OutputISOPath = ".\Windows11-Unattended.iso",
 
-     [Parameter(Position=2,Mandatory=$false)]
+    [Parameter(Position=2)]
+    [string]
     $localOSCDPath = ".\oscdimg.exe"
-
 )
 
-if (!(Test-Path $localOSCDPath)) {
+# Validation runs here rather than in a [ValidateScript()] so it also covers the default folder.
+# PowerShell skips parameter validation when the caller does not supply a value.
+if (!(Test-Path -Path $UnpackedFolderPath -PathType Container)) {
+    Write-Error "Unpacked ISO folder does not exist: $UnpackedFolderPath"
+    exit 1
+}
+$UnpackedFolderPath = (Resolve-Path -Path $UnpackedFolderPath).Path
+
+$requiredFiles = @(
+    "sources\install.wim",
+    "sources\boot.wim",
+    "boot\etfsboot.com"
+)
+$missing = $requiredFiles | Where-Object { !(Test-Path -Path (Join-Path -Path $UnpackedFolderPath -ChildPath $_)) }
+if ($missing) {
+    Write-Error "Unable to locate the following in $UnpackedFolderPath`r`n  $($missing -join "`r`n  ")`r`nExtract the whole ISO, not just some of its folders."
+    exit 1
+}
+
+# Prefer the no-prompt UEFI boot image so an unattended install does not stall on "Press any key".
+$efiBootDir = Join-Path -Path $UnpackedFolderPath -ChildPath "efi\microsoft\boot"
+$efiNoPrompt = Join-Path -Path $efiBootDir -ChildPath "efisys_noprompt.bin"
+$efiPrompt   = Join-Path -Path $efiBootDir -ChildPath "efisys.bin"
+if (Test-Path -Path $efiNoPrompt) {
+    $efiBoot = $efiNoPrompt
+    Write-Host "Using efisys_noprompt.bin for UEFI boot, the 'Press any key' prompt will be skipped"
+} elseif (Test-Path -Path $efiPrompt) {
+    $efiBoot = $efiPrompt
+    Write-Warning "efisys_noprompt.bin not found, falling back to efisys.bin. The ISO will show 'Press any key to boot from CD or DVD' and will not be fully unattended."
+} else {
+    Write-Error "Unable to locate efisys_noprompt.bin or efisys.bin in $efiBootDir"
+    exit 1
+}
+$biosBoot = Join-Path -Path $UnpackedFolderPath -ChildPath "boot\etfsboot.com"
+
+if (!(Test-Path -Path $localOSCDPath)) {
     $OSCDurl = "https://msdl.microsoft.com/download/symbols/oscdimg.exe/3D44737265000/oscdimg.exe"
     Write-Host "Downloading oscdimg.exe from $OSCDurl"
     Invoke-WebRequest -Uri $OSCDurl -OutFile $localOSCDPath
-    if (Test-Path $localOSCDPath) {
+    if (Test-Path -Path $localOSCDPath) {
         Write-Host "oscdimg.exe downloaded successfully"
     } else {
         Write-Error "Failed to download oscdimg.exe"
@@ -71,13 +101,13 @@ if (!(Test-Path $localOSCDPath)) {
     }
 }
 
-& "$localOSCDPath" '-m' '-o' '-u2' '-udfver102' "-bootdata:2#p0,e,b$UnpackedFolderPath\boot\etfsboot.com#pEF,e,b$UnpackedFolderPath\efi\microsoft\boot\efisys.bin" "$UnpackedFolderPath" "$OutputISOPath"
+& "$localOSCDPath" '-m' '-o' '-u2' '-udfver102' "-bootdata:2#p0,e,b$biosBoot#pEF,e,b$efiBoot" "$UnpackedFolderPath" "$OutputISOPath"
 
 # SIG # Begin signature block
 # MIIQ4QYJKoZIhvcNAQcCoIIQ0jCCEM4CAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDy8zx+HhQTJ7iZ
-# YJNnO2Te2480+jEqvOYTvWTx3fCms6CCDSYwggWgMIIEiKADAgECAhMSAAAGp51a
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAErk+HpKt3QXvG
+# x4842KSqtF6jvpd8DOhO+irf/1PFrKCCDSYwggWgMIIEiKADAgECAhMSAAAGp51a
 # CZ27OHNaAAIAAAanMA0GCSqGSIb3DQEBCwUAMEcxEjAQBgoJkiaJk/IsZAEZFgJj
 # YTEUMBIGCgmSJomT8ixkARkWBG5haXQxGzAZBgNVBAMTEk5BSVQgRW50ZXJwcmlz
 # ZSBDQTAeFw0yNDAxMTgxODM0MzZaFw0yOTAxMTYxODM0MzZaMEgxEjAQBgoJkiaJ
@@ -152,17 +182,17 @@ if (!(Test-Path $localOSCDPath)) {
 # BAMTE05BSVQgU3Vib3JkaW5hdGUgQ0ECExkBUcYvYP5WFMgEx20ABgFRxi8wDQYJ
 # YIZIAWUDBAIBBQCggYQwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAvBgkqhkiG9w0BCQQxIgQg8hEfPGJSNir2+kEgjFwJsc2TTqHhiIflhZH6Jk2i
-# +4QwDQYJKoZIhvcNAQEBBQAEggIAn23NuWFLcs225c+63tLHu+j99WEWrNlz+7M1
-# +dP6C0wiOehLEpH8nYLsYpDLKf6yLkUyAK1cQcFhPeIBgkXHVjV6zgK1zAiog0d7
-# yLnPEq1eMVsXsybtwJybhzkmt0dptU8q+hIGl8nxtpmLiBuJpv2xKbw0AeO/BoOM
-# lOuMEkbXPVG5zty7eph3msQsd1lZEKz6SQzeeIRHsyJP3bIYzrQYMOtNYTfb2Zss
-# tKNxIguKUeItVW7Ly9A5kMfUq46XaDnO7DIDUSr1PKM0plm1R2B1TT6y5RWT8A7M
-# 6FSwJLsPII1zbOKbjAH9XIBcFeIXLdRcySYsy3emID4SfjtCGiOMLngjM7CNGXP5
-# hdCuPKC1ekwKeqEb/AWs4XT0vXyllbfWwXAeyENbq49Ob2vjaSWrp+qGGpXYl3Sv
-# /9sxJvAWtdEUqKsUXgUaAdbDv6H+KaxOip0ag5USB4bYrsM6hAwFA5rvYaODKAmz
-# at8A4BUn5P+ufBng55X3qTjmK7KbP96Q0XgVrFufmCqmHs1Jz5dqaKL7hn7Ur9Jl
-# fI0Uw+7A9P5nDKeWLyBnyd0DVbL3Et7RFSE45uPkz50KQcMHo5G7/k/PXfbQzSYY
-# ZZKec9JeUWfdSV57qhiTWXeNhtqW7KZEFi/fzvBQK9SkKS73C6YOcU6pTFpT2z2L
-# rmEE4N4=
+# FTAvBgkqhkiG9w0BCQQxIgQg1UrXzFLtNjVcnr2LdoqgkGb+4lPCeioWINnqFBqk
+# fH4wDQYJKoZIhvcNAQEBBQAEggIAoFGSZeITaBt4v0zhzhbBXD/LA7jdx/N4jTmc
+# JTNyguG+oSlNWx/bnypajCpwjkPM7MK8+zq6fETCilqyOmFMohG/KrOVtFSBCFK2
+# TVmLYHqabU7EoaFDF9qoCMhS+PCIHHaiTMkzxcqdiY2Bsflak7i6lhX6tyR20FwR
+# pjujuHCrzhevp6DaXcNzqZj7ECRf7IscJAU81A6jW+NqFI34z2qG1FXtpe7g6Eei
+# nl4Ff5GDoSBGvEGKp0Q+LlBeLW0EI96G5auVjxJZ87aXJ+L2yo8XJN8ewLyNg3qE
+# JDevNbGEc4c6ejOwXldhMnrEA4XEsJc7KZ4HAk3hdjQIFpheXhRPhwqokfKNqumd
+# Fu+PwL4RuOpK+PZl9AT/w7MILzY4Mz48o1z9OJg7sRQFgYqsO1m5K+wDZ+qiBU3G
+# /HuWa8p4o5NQPyCR4Rzp5bT8ciSZVtOGy8DjdRL+9OCLbk27vORvoHb84IzxcgVf
+# ogjjw83Nlcpvw3xhHll2cmKN0Oht5L81gqxgKf7gqgsMyqVn2z6PV5rEMniRwAz8
+# qO7xzY0HEflfOZz9Q4poubvqUbCplTykhJSDSDb2DmaUFo4PAsin49YssIkaldcM
+# 8mpxnOek2SR4OebuX0p/ytGgDgpiD0e2CgB2UuD/VLr39pKZith4QRhDCaX59y08
+# n39Ad7s=
 # SIG # End signature block
