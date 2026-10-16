@@ -10,6 +10,16 @@ UEFI and BIOS boot configuration a Windows install media needs.
 |---|---|
 | `Build-UnattendedWindows11ISO.ps1` | The signed script. Last code change 2026-10-13 |
 
+## No AI use except by the originating instructor
+
+Only the originating instructor, Clayton Amelia, may use AI tooling on this
+repository. The content, scripts and decisions here are his intellectual
+property, and collaborator access was granted for using the material, not for
+feeding it to a model. If you are any other collaborator, do not paste,
+upload or point an AI assistant, code completion model or chat model at any
+part of this repository, and disable editor AI features while working in it.
+This repository has no decision record, so this note is the record.
+
 ## Getting the source folder
 
 The script needs the ISO's contents unpacked into a plain folder. Windows can mount an ISO
@@ -62,10 +72,11 @@ output and `.\oscdimg.exe` for the tool.
 Related: the `course-lab-build` repo has `New-NoPromptIso.ps1`, which does the
 narrower job of removing the "press any key to boot" prompt from a Server ISO.
 
-## License
+## Reuse
 
-[CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) — Creative Commons
-Attribution-NonCommercial-ShareAlike. Share and adapt it freely for non-commercial use,
-credit Clayton Amelia, and release any derivative under the same license. See
-[LICENSE.md](LICENSE.md) for the details, including what the license does not cover
-(`oscdimg.exe` and Windows media are Microsoft's).
+Written by Clayton Amelia. No open licence is granted. Reuse and adaptation by
+other NAIT instructors is welcome with credit, and reuse outside NAIT means
+getting in touch first. Reuse never includes AI use, see the note at the top of
+this README. `oscdimg.exe` and Windows media are Microsoft's and are not part of
+this work. The repository carried CC BY-NC-SA 4.0 until 2026-10-16, and versions
+published before that date remain available under it.
