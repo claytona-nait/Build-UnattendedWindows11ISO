@@ -11,6 +11,7 @@ boot files oscdimg needs (`boot\etfsboot.com` for BIOS and `efi\microsoft\boot\e
 Because the output is meant to be an unattended installer, the script prefers `efisys_noprompt.bin` for the UEFI boot
 image when the source folder has one. That removes the "Press any key to boot from CD or DVD" prompt, so the install
 starts without anyone at the keyboard. If only `efisys.bin` is present it is used instead and a warning is written.
+Pass `-KeepPrompt` to use `efisys.bin` deliberately, for an ISO that should still wait at the prompt.
 
 .PARAMETER UnpackedFolderPath
 Specifies the path to the unpacked Windows installation files.
@@ -26,6 +27,11 @@ Default: .\Windows11-Unattended.iso
 Specifies the local path to `oscdimg.exe`. If the file does not exist, it will be downloaded automatically.
 Default: .\oscdimg.exe
 
+.PARAMETER KeepPrompt
+Uses `efi\microsoft\boot\efisys.bin` for the UEFI boot image even when `efisys_noprompt.bin` is present, so the
+ISO keeps the "Press any key to boot from CD or DVD" prompt. Useful when the media should not reinstall on its own
+if it is left in a drive. Without this switch the no-prompt image is preferred.
+
 .EXAMPLE
 PS> .\Build-UnattendedWindows11ISO.ps1 -UnpackedFolderPath "C:\Win11Files" -OutputISOPath "C:\Win11-Unattended.iso"
 Creates a bootable Windows 11 ISO from the unpacked files located in `C:\Win11Files` and saves it as `C:\Win11-Unattended.iso`.
@@ -34,9 +40,13 @@ Creates a bootable Windows 11 ISO from the unpacked files located in `C:\Win11Fi
 PS> .\Build-UnattendedWindows11ISO.ps1
 Uses default paths to create a bootable Windows 11 ISO from the `.\Windows11` folder and saves it as `.\Windows11-Unattended.iso`.
 
+.EXAMPLE
+PS> .\Build-UnattendedWindows11ISO.ps1 -KeepPrompt
+Builds from the default paths but boots with `efisys.bin`, so the ISO still asks for a key press before starting the installer.
+
 .NOTES
 Author: Clayton Amelia
-Version: 1.3.0
+Version: 1.4.0
 Requires: PowerShell 5.1 or later, Internet access (if oscdimg.exe needs to be downloaded)
 #>
 param (
@@ -50,7 +60,11 @@ param (
 
     [Parameter(Position=2)]
     [string]
-    $localOSCDPath = ".\oscdimg.exe"
+    $localOSCDPath = ".\oscdimg.exe",
+
+    [Parameter()]
+    [switch]
+    $KeepPrompt
 )
 
 # Validation runs here rather than in a [ValidateScript()] so it also covers the default folder.
@@ -72,11 +86,19 @@ if ($missing) {
     exit 1
 }
 
-# Prefer the no-prompt UEFI boot image so an unattended install does not stall on "Press any key".
+# Prefer the no-prompt UEFI boot image so an unattended install does not stall on "Press any key",
+# unless -KeepPrompt asks for the standard image on purpose.
 $efiBootDir = Join-Path -Path $UnpackedFolderPath -ChildPath "efi\microsoft\boot"
 $efiNoPrompt = Join-Path -Path $efiBootDir -ChildPath "efisys_noprompt.bin"
 $efiPrompt   = Join-Path -Path $efiBootDir -ChildPath "efisys.bin"
-if (Test-Path -Path $efiNoPrompt) {
+if ($KeepPrompt) {
+    if (!(Test-Path -Path $efiPrompt)) {
+        Write-Error "-KeepPrompt was given but efisys.bin was not found in $efiBootDir"
+        exit 1
+    }
+    $efiBoot = $efiPrompt
+    Write-Host "Using efisys.bin for UEFI boot because -KeepPrompt was given, the ISO will show 'Press any key to boot from CD or DVD'"
+} elseif (Test-Path -Path $efiNoPrompt) {
     $efiBoot = $efiNoPrompt
     Write-Host "Using efisys_noprompt.bin for UEFI boot, the 'Press any key' prompt will be skipped"
 } elseif (Test-Path -Path $efiPrompt) {

@@ -8,7 +8,7 @@ UEFI and BIOS boot configuration a Windows install media needs.
 
 | File | What it is |
 |---|---|
-| `Build-UnattendedWindows11ISO.ps1` | The signed script. Last code change 2026-10-13 |
+| `Build-UnattendedWindows11ISO.ps1` | The signed script. Last code change 2026-11-09 |
 
 ## No AI use except by the originating instructor
 
@@ -42,7 +42,7 @@ already inside the extracted ISO, and checks they exist before it starts:
 | File | Path inside `Windows11` | Role |
 |---|---|---|
 | `efisys_noprompt.bin` | `efi\microsoft\boot\efisys_noprompt.bin` | UEFI boot image with no "Press any key" prompt. Used when present |
-| `efisys.bin` | `efi\microsoft\boot\efisys.bin` | Standard UEFI boot image. Fallback, with a warning, if the no-prompt one is missing |
+| `efisys.bin` | `efi\microsoft\boot\efisys.bin` | Standard UEFI boot image. Used with `-KeepPrompt`, or as a fallback with a warning if the no-prompt one is missing |
 | `etfsboot.com` | `boot\etfsboot.com` | Legacy BIOS boot sector, kept so the ISO also boots on older firmware |
 
 `efisys.bin` is the small FAT image holding the UEFI bootloader, and it is the file
@@ -56,7 +56,9 @@ rename. If you ever build with `oscdimg` by hand, the equivalent is to copy
 `efisys_noprompt.bin` over `efisys.bin` before running it.
 
 The trade-off is that a no-prompt ISO left in a VM's virtual drive will reinstall on the
-next reboot without asking, so detach the media once the install is going.
+next reboot without asking, so detach the media once the install is going. If you would
+rather the ISO wait for a key press, pass `-KeepPrompt` and the script boots it with
+`efisys.bin` instead.
 
 ## Usage
 
@@ -67,7 +69,8 @@ From the folder:
 ```
 
 Defaults are `.\Windows11` for the source, `.\Windows11-Unattended.iso` for the
-output and `.\oscdimg.exe` for the tool.
+output and `.\oscdimg.exe` for the tool. Add `-KeepPrompt` to keep the "Press any key"
+prompt in the built ISO.
 
 Related: the `course-lab-build` repo has `New-NoPromptIso.ps1`, which does the
 narrower job of removing the "press any key to boot" prompt from a Server ISO.
