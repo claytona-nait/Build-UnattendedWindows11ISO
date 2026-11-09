@@ -5,8 +5,15 @@ Creates a bootable Windows ISO from an unpacked installation source, ensuring re
 .DESCRIPTION
 This script automates the creation of a bootable Windows ISO image from an unpacked Windows installation folder.
 It validates that the source folder contains the installer images (`sources\install.wim` and `sources\boot.wim`) and the
-boot files oscdimg needs (`boot\etfsboot.com` for BIOS and `efi\microsoft\boot\efisys.bin` for UEFI), downloads
-`oscdimg.exe` from Microsoft if it is not available locally, and then uses `oscdimg.exe` to generate the ISO.
+boot files oscdimg needs (`boot\etfsboot.com` for BIOS and `efi\microsoft\boot\efisys.bin` for UEFI), locates a
+trustworthy `oscdimg.exe`, and then uses it to generate the ISO.
+
+`oscdimg.exe` is found in this order: the path given in `localOSCDPath`, then the Windows ADK Deployment Tools copy
+if the ADK is installed, then the `Microsoft.OSCDIMG` winget package, which winget downloads from Microsoft's symbol
+server. A copy is only used if it carries a valid Microsoft Authenticode signature, which the ADK copy does, or its
+SHA256 matches the hash in the public winget manifest, which the symbol server copy does. A local copy that passes
+neither test is skipped with a warning. The script never fetches the file from a hard-coded URL, since Microsoft
+publishes no checksum for it.
 
 Because the output is meant to be an unattended installer, the script prefers `efisys_noprompt.bin` for the UEFI boot
 image when the source folder has one. That removes the "Press any key to boot from CD or DVD" prompt, so the install
@@ -25,7 +32,9 @@ Specifies the path and filename for the generated ISO image. When omitted the na
 Default: .\Windows11-Unattended.iso or .\Windows11.iso, see above
 
 .PARAMETER localOSCDPath
-Specifies the local path to `oscdimg.exe`. If the file does not exist, it will be downloaded automatically.
+Specifies the local path to `oscdimg.exe`. The file is used only if it is signed by Microsoft or matches the winget
+manifest hash. If it is missing or fails both tests the script looks for the Windows ADK copy and then installs the
+`Microsoft.OSCDIMG` winget package, see the description.
 Default: .\oscdimg.exe
 
 .PARAMETER KeepPrompt
@@ -69,8 +78,8 @@ Builds from the default paths but boots with `efisys.bin`, so the ISO still asks
 
 .NOTES
 Author: Clayton Amelia
-Version: 1.4.0
-Requires: PowerShell 5.1 or later, Internet access (if oscdimg.exe needs to be downloaded)
+Version: 1.5.0
+Requires: PowerShell 5.1 or later. Either a local oscdimg.exe, the Windows ADK Deployment Tools, or winget with Internet access
 #>
 param (
     [Parameter(Position=0)]
@@ -221,17 +230,77 @@ if ($VolumeLabel -notmatch '^[A-Za-z0-9_\-]{1,32}$') {
 }
 Write-Host "Volume label will be $VolumeLabel"
 
-if (!(Test-Path -Path $localOSCDPath)) {
-    $OSCDurl = "https://msdl.microsoft.com/download/symbols/oscdimg.exe/3D44737265000/oscdimg.exe"
-    Write-Host "Downloading oscdimg.exe from $OSCDurl"
-    Invoke-WebRequest -Uri $OSCDurl -OutFile $localOSCDPath
-    if (Test-Path -Path $localOSCDPath) {
-        Write-Host "oscdimg.exe downloaded successfully"
+# Find an oscdimg.exe we can account for. Microsoft publishes no checksum for the file itself, so two tests
+# stand in: a valid Microsoft Authenticode signature, which the ADK copy carries, or a SHA256 that matches the
+# public winget manifest, which the symbol server copy does. A copy the caller points at is tried first, then
+# the ADK, then the winget package. A bare download from a hard-coded URL would pass neither test and is not offered.
+$wingetAvailable = [bool](Get-Command -Name winget -ErrorAction SilentlyContinue)
+$manifestHash = $null
+if ($wingetAvailable) {
+    $wingetShow = winget show --id Microsoft.OSCDIMG --exact --disable-interactivity --accept-source-agreements 2>$null | Out-String
+    if ($wingetShow -match 'Installer SHA256:\s*([0-9A-Fa-f]{64})') { $manifestHash = $Matches[1].ToUpperInvariant() }
+}
+function Test-TrustedOscdimg([string]$Path) {
+    $signature = Get-AuthenticodeSignature -FilePath $Path
+    if ($signature.Status -eq "Valid" -and $signature.SignerCertificate.Subject -like "*O=Microsoft Corporation*") {
+        return "signed by Microsoft"
+    }
+    if ($manifestHash -and (Get-FileHash -Path $Path -Algorithm SHA256).Hash -eq $manifestHash) {
+        return "matches the winget manifest hash"
+    }
+    return $null
+}
+
+$oscdimgSource = $null
+if (Test-Path -Path $localOSCDPath -PathType Leaf) {
+    $trust = Test-TrustedOscdimg -Path $localOSCDPath
+    if ($trust) {
+        $oscdimgSource = "local copy, $trust"
     } else {
-        Write-Error "Failed to download oscdimg.exe"
-        exit 1
+        $why = if ($manifestHash) { "is not signed by Microsoft and does not match the winget manifest hash" } else { "is not signed by Microsoft and the winget manifest hash could not be read to compare it" }
+        Write-Warning "Not using $localOSCDPath, it $why. Looking for a copy that can be verified."
     }
 }
+if (!$oscdimgSource) {
+    $kitsRoot = (Get-ItemProperty -Path "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows Kits\Installed Roots" -ErrorAction SilentlyContinue).KitsRoot10
+    if (!$kitsRoot) { $kitsRoot = Join-Path -Path ${env:ProgramFiles(x86)} -ChildPath "Windows Kits\10" }
+    $adkArch = switch ($env:PROCESSOR_ARCHITECTURE) { "ARM64" { "arm64" } "x86" { "x86" } default { "amd64" } }
+    $adkOscdimg = Join-Path -Path $kitsRoot -ChildPath "Assessment and Deployment Kit\Deployment Tools\$adkArch\Oscdimg\oscdimg.exe"
+    if (Test-Path -Path $adkOscdimg -PathType Leaf) {
+        $trust = Test-TrustedOscdimg -Path $adkOscdimg
+        if ($trust) {
+            $localOSCDPath = $adkOscdimg
+            $oscdimgSource = "Windows ADK, $trust"
+        } else {
+            Write-Warning "Not using the Windows ADK copy at $adkOscdimg, its signature did not verify."
+        }
+    }
+}
+if (!$oscdimgSource) {
+    if (!$wingetAvailable) {
+        Write-Error "No verifiable oscdimg.exe was found and winget is not available to fetch one.`r`nInstall the Windows ADK Deployment Tools, or install winget, or pass -localOSCDPath pointing at a copy signed by Microsoft."
+        exit 1
+    }
+    $wingetOscdimg = Join-Path -Path $env:LOCALAPPDATA -ChildPath "Microsoft\WinGet\Packages\Microsoft.OSCDIMG_Microsoft.Winget.Source_8wekyb3d8bbwe\oscdimg.exe"
+    $trust = if (Test-Path -Path $wingetOscdimg -PathType Leaf) { Test-TrustedOscdimg -Path $wingetOscdimg } else { $null }
+    if (!$trust) {
+        Write-Host "Installing the Microsoft.OSCDIMG winget package"
+        winget install --id Microsoft.OSCDIMG --exact --disable-interactivity --accept-source-agreements --accept-package-agreements --force | Out-Host
+        if (!(Test-Path -Path $wingetOscdimg -PathType Leaf)) {
+            Write-Error "winget did not leave oscdimg.exe at $wingetOscdimg"
+            exit 1
+        }
+        $trust = Test-TrustedOscdimg -Path $wingetOscdimg
+        if (!$trust) {
+            Write-Error "The oscdimg.exe winget installed does not match the hash in its own manifest, refusing to run it."
+            exit 1
+        }
+    }
+    $localOSCDPath = $wingetOscdimg
+    $oscdimgSource = "winget package, $trust"
+}
+$localOSCDPath = (Resolve-Path -Path $localOSCDPath).Path
+Write-Host "Using oscdimg.exe from the $oscdimgSource, at $localOSCDPath"
 
 & "$localOSCDPath" '-m' '-o' '-u2' '-udfver102' "-l$VolumeLabel" "-bootdata:2#p0,e,b$biosBoot#pEF,e,b$efiBoot" "$UnpackedFolderPath" "$OutputISOPath"
 
@@ -254,6 +323,8 @@ $summary = [ordered]@{
     "Size"         = "{0:N2} GB" -f ($iso.Length / 1GB)
     "Volume label" = $VolumeLabel
     "UEFI boot"    = Split-Path -Path $efiBoot -Leaf
+    "oscdimg"      = "$oscdimgSource, $localOSCDPath"
+    "oscdimg hash" = (Get-FileHash -Path $localOSCDPath -Algorithm SHA256).Hash
     "Answer file"  = if ($hasUnattend) { "autounattend.xml included" } else { "none, plain install media" }
 }
 if (!$SkipHash) {
@@ -276,8 +347,8 @@ exit 0
 # SIG # Begin signature block
 # MIIQ4QYJKoZIhvcNAQcCoIIQ0jCCEM4CAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBqDc6u3O3SW1Dm
-# 9mgZBVen9H/+Y+L0u14ZxQuwiu51hqCCDSYwggWgMIIEiKADAgECAhMSAAAGp51a
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCdnXWwELTXTLej
+# QIIzrQaoZFdJMEbWutkyG17kbDF3waCCDSYwggWgMIIEiKADAgECAhMSAAAGp51a
 # CZ27OHNaAAIAAAanMA0GCSqGSIb3DQEBCwUAMEcxEjAQBgoJkiaJk/IsZAEZFgJj
 # YTEUMBIGCgmSJomT8ixkARkWBG5haXQxGzAZBgNVBAMTEk5BSVQgRW50ZXJwcmlz
 # ZSBDQTAeFw0yNDAxMTgxODM0MzZaFw0yOTAxMTYxODM0MzZaMEgxEjAQBgoJkiaJ
@@ -352,17 +423,17 @@ exit 0
 # BAMTE05BSVQgU3Vib3JkaW5hdGUgQ0ECExkBUcYvYP5WFMgEx20ABgFRxi8wDQYJ
 # YIZIAWUDBAIBBQCggYQwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAvBgkqhkiG9w0BCQQxIgQgojmUThwQAuiuWQ2WRTe8DPoLLLCocYyli7OVvkSO
-# JtAwDQYJKoZIhvcNAQEBBQAEggIARR6nSlwETu8nmxCSkrtf9CG2Qs1x4PS2NXLm
-# 9+gVuFZg0TxZ4hEpAbwoquPZLxR3mimLQc8Gc5Rs9oN1VAWN/En42qJbp0P0KsdB
-# Ty7QkVT/C1sCCJJ9FnZXIV12BiX06RFvKQJXRxWiFo3OdHHg5TyrbnK+oSK1tbJw
-# RjCzqDqOyr3XyI0Mp/swOX3Rp2dwGd3M/OxFpzlUxdYY8dHQmjdncyo0axh2xs5a
-# 3yTttdO/tcDdn1jAZynndNFw9yC0Pzu0IeTbt4tizCml367NostgjGqxKpFWCbUh
-# VXlq43jGlKdYMwSEli1p7XSt9MhM/5yI/auzQguBPAjCFZEEk1NDJfSVT72uZCEw
-# 9hqslEZUzLB7iHJWm8Mm+CggS2tye69a2ACYS82GPepuDOqVp5+5IJ2+W6njfYRV
-# hfCvd8dJrxRZ80kwXQrARqTW06hJzzu5Qk79EJL0A+O3mfQ6cpSBmUQBp05H1Ngs
-# DXYwcImeWrFt1biJnQKo8TgJNjE8U8B7T7REYRr41oODp1B6+1quglttDnHjns3C
-# GDdWXLTgKVVF8PT7QhgSrNAjmZd0lssPnGW9u3dl5ZtoKJ6IwbfquxMiAwurPjAX
-# FuAUDfTzZgdI1C6Zo0AYm/G/i5ilxmSVTYWRQeOGm6ZWkUawGqt0/FUWRI/VRnww
-# HdQ8+pk=
+# FTAvBgkqhkiG9w0BCQQxIgQgY+ctxtuaQdu1/0AxKRiylRKDMJX1Af9yHj2h6lDK
+# jSAwDQYJKoZIhvcNAQEBBQAEggIAMSQZfohtFCyPcJMulnS611r6HcB72Q/Jg+hs
+# Bcw+EaR0WGkMRAhWAeaOfqiPPeF43x3J6MojhOvw3+XFzhnnX9CyE1CbD9/XJ6Sw
+# LRvGimo5Jdl4dS0GWPbWfKAi6TZNmr8uCGzPXXrmNIehxA7vOiNeTpQlQ9F2C8Sy
+# S+bJgrXI7H7Lwu6xEgcDl9jQrztAp0Q/9Q3lYU4FNoA4hWWPOu99+p2o16D0CxCi
+# GWNcPQ9C+iuoLEaKArP2TtD2p1Yu4y29770df6/02pnDKDZKO+z+sYW+8DZjX3z2
+# jiYmhRyqYgGa9KMrAOF/5TMyeCL9LhPNAkX1uhsFACchAxOV0jRMeU088GcMZFpg
+# Swhkp7O+R+O4Zk8NnbPVKs299mLpekXuBjrd2OmK2p5bwM6mnjXjpYx8i7+9zkfe
+# CCCQCaIgq4qThpjhFEnrprvTODPTpkHJPMYKT11D47phge1T+nGk6KApwwkjVPGK
+# wx7aTBs4n6BscbF7awnPULVUngnMUFWX7Q3EMN21XetIwYdydraqNqpFAz6RqAG/
+# PND1Xm7o/lDKGJAs+XYFR3T9AVLx4xUY4TyR84SZudxstdN8qXG+CwhWO6gXMb6v
+# UVZS2Njo9eqgSwNkZWd2K4WSZcyMvyHRffTe+2PcTWRkKMAKd4z3Lvjn6TF0BRni
+# g68koxQ=
 # SIG # End signature block

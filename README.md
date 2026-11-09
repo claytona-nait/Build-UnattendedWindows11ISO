@@ -2,9 +2,9 @@
 
 Rebuilds a bootable Windows ISO from an unpacked installation folder, so an
 `autounattend.xml` dropped into the folder rides along in the image. The script
-checks that `sources\install.wim` and `sources\boot.wim` are present, downloads
-`oscdimg.exe` from Microsoft if there is no local copy, and calls it with the
-UEFI and BIOS boot configuration a Windows install media needs.
+checks that `sources\install.wim` and `sources\boot.wim` are present, finds
+`oscdimg.exe` in the Windows ADK or installs it with winget if there is no local copy,
+and calls it with the UEFI and BIOS boot configuration a Windows install media needs.
 
 | File | What it is |
 |---|---|
@@ -66,6 +66,28 @@ The trade-off is that a no-prompt ISO left in a VM's virtual drive will reinstal
 next reboot without asking, so detach the media once the install is going. If you would
 rather the ISO wait for a key press, pass `-KeepPrompt` and the script boots it with
 `efisys.bin` instead.
+
+## Getting oscdimg.exe
+
+`oscdimg.exe` is Microsoft's ISO mastering tool. It ships inside the Windows ADK and is
+not offered as a standalone download with a published checksum, so the script accepts a
+copy only if it passes one of two tests: a valid Microsoft Authenticode signature, which
+the ADK copy carries, or a SHA256 that matches the `Microsoft.OSCDIMG` winget manifest,
+which is what the symbol server copy has. It tries these locations in order and says
+which one it used in the build summary:
+
+| Order | Location | What usually passes |
+|---|---|---|
+| 1 | The path in `-localOSCDPath`, default `.\oscdimg.exe` | A copy taken from the ADK, or one winget fetched. Anything else is skipped with a warning |
+| 2 | Windows ADK Deployment Tools, found through the Installed Roots registry key | Signed by Microsoft |
+| 3 | The `Microsoft.OSCDIMG` winget package, installed if it is not already there | winget checks the hash on download and the script checks it again |
+
+If none of those yields a verifiable copy the script stops and says so. It never fetches
+the file from a hard-coded URL, because there is nothing to check such a download against.
+The manifest hash is read live with `winget show`, so it tracks the file when Microsoft
+re-uploads it. The manifest is community-submitted and reviewed in the
+[winget-pkgs](https://github.com/microsoft/winget-pkgs/tree/master/manifests/m/Microsoft/OSCDIMG)
+repository, and the symbol server copy it points at is not signed.
 
 ## Usage
 
