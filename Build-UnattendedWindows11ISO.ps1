@@ -32,6 +32,10 @@ Uses `efi\microsoft\boot\efisys.bin` for the UEFI boot image even when `efisys_n
 ISO keeps the "Press any key to boot from CD or DVD" prompt. Useful when the media should not reinstall on its own
 if it is left in a drive. Without this switch the no-prompt image is preferred.
 
+.PARAMETER Force
+Overwrites an existing ISO at `OutputISOPath`. Without this switch the script stops rather than replace a file that
+is already there. A locked ISO, such as one still attached to a running VM, cannot be overwritten either way.
+
 .EXAMPLE
 PS> .\Build-UnattendedWindows11ISO.ps1 -UnpackedFolderPath "C:\Win11Files" -OutputISOPath "C:\Win11-Unattended.iso"
 Creates a bootable Windows 11 ISO from the unpacked files located in `C:\Win11Files` and saves it as `C:\Win11-Unattended.iso`.
@@ -64,7 +68,11 @@ param (
 
     [Parameter()]
     [switch]
-    $KeepPrompt
+    $KeepPrompt,
+
+    [Parameter()]
+    [switch]
+    $Force
 )
 
 # Validation runs here rather than in a [ValidateScript()] so it also covers the default folder.
@@ -109,6 +117,34 @@ if ($KeepPrompt) {
     exit 1
 }
 $biosBoot = Join-Path -Path $UnpackedFolderPath -ChildPath "boot\etfsboot.com"
+
+# Check the output path before oscdimg does, since its own errors for a missing folder or a locked
+# file are terse. The parent folder must exist, the ISO must not land inside the source tree where
+# oscdimg would try to pack it into itself, and an existing ISO is only replaced with -Force.
+$outputDir = Split-Path -Path $OutputISOPath -Parent
+if ([string]::IsNullOrEmpty($outputDir)) { $outputDir = "." }
+if (!(Test-Path -Path $outputDir -PathType Container)) {
+    Write-Error "Output folder does not exist: $outputDir"
+    exit 1
+}
+$OutputISOPath = Join-Path -Path (Resolve-Path -Path $outputDir).Path -ChildPath (Split-Path -Path $OutputISOPath -Leaf)
+if ($OutputISOPath.StartsWith($UnpackedFolderPath + "\", [System.StringComparison]::OrdinalIgnoreCase)) {
+    Write-Error "Output ISO path is inside the source folder, choose a location outside $UnpackedFolderPath"
+    exit 1
+}
+if (Test-Path -Path $OutputISOPath -PathType Leaf) {
+    if (!$Force) {
+        Write-Error "Output ISO already exists: $OutputISOPath`r`nPass -Force to overwrite it."
+        exit 1
+    }
+    try {
+        Remove-Item -Path $OutputISOPath -Force -ErrorAction Stop
+        Write-Host "Removed existing $OutputISOPath"
+    } catch {
+        Write-Error "Unable to remove existing $OutputISOPath, it may still be attached to a VM: $($_.Exception.Message)"
+        exit 1
+    }
+}
 
 if (!(Test-Path -Path $localOSCDPath)) {
     $OSCDurl = "https://msdl.microsoft.com/download/symbols/oscdimg.exe/3D44737265000/oscdimg.exe"
