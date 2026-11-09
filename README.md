@@ -85,6 +85,10 @@ The ISO gets the volume label `Win11_Unattended` instead of oscdimg's default `D
 so a mounted image says what it is. Pass `-VolumeLabel` to set your own, up to 32
 characters of letters, digits, underscore or hyphen.
 
+The script exits 0 only when `oscdimg` succeeded and the ISO is on disk. A failed check
+exits 1, and an `oscdimg` failure exits with `oscdimg`'s own code, so a calling script
+can test `$LASTEXITCODE` instead of parsing the output.
+
 Related: the `course-lab-build` repo has `New-NoPromptIso.ps1`, which does the
 narrower job of removing the "press any key to boot" prompt from a Server ISO.
 

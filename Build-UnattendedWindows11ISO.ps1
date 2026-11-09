@@ -203,18 +203,30 @@ if (!(Test-Path -Path $localOSCDPath)) {
         Write-Host "oscdimg.exe downloaded successfully"
     } else {
         Write-Error "Failed to download oscdimg.exe"
-        pause
         exit 1
     }
 }
 
 & "$localOSCDPath" '-m' '-o' '-u2' '-udfver102' "-l$VolumeLabel" "-bootdata:2#p0,e,b$biosBoot#pEF,e,b$efiBoot" "$UnpackedFolderPath" "$OutputISOPath"
 
+# Pass oscdimg's result through so a wrapper or a CI step can tell a failed build from a good one.
+# Its own output already says what went wrong, this just makes sure the script does not exit 0 after it.
+$oscdimgExitCode = $LASTEXITCODE
+if ($oscdimgExitCode -ne 0) {
+    Write-Error "oscdimg.exe failed with exit code $oscdimgExitCode"
+    exit $oscdimgExitCode
+}
+if (!(Test-Path -Path $OutputISOPath -PathType Leaf)) {
+    Write-Error "oscdimg.exe returned 0 but no ISO was written to $OutputISOPath"
+    exit 1
+}
+exit 0
+
 # SIG # Begin signature block
 # MIIQ4QYJKoZIhvcNAQcCoIIQ0jCCEM4CAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCAXbu6FWxdIakC
-# M3jaNP/oNLlNU2mW5JT2CLv7F2lo66CCDSYwggWgMIIEiKADAgECAhMSAAAGp51a
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDoYpPSFIx0t7pN
+# dTrP9PDUgPSr09Tx1qAQLGH1o2uZp6CCDSYwggWgMIIEiKADAgECAhMSAAAGp51a
 # CZ27OHNaAAIAAAanMA0GCSqGSIb3DQEBCwUAMEcxEjAQBgoJkiaJk/IsZAEZFgJj
 # YTEUMBIGCgmSJomT8ixkARkWBG5haXQxGzAZBgNVBAMTEk5BSVQgRW50ZXJwcmlz
 # ZSBDQTAeFw0yNDAxMTgxODM0MzZaFw0yOTAxMTYxODM0MzZaMEgxEjAQBgoJkiaJ
@@ -289,17 +301,17 @@ if (!(Test-Path -Path $localOSCDPath)) {
 # BAMTE05BSVQgU3Vib3JkaW5hdGUgQ0ECExkBUcYvYP5WFMgEx20ABgFRxi8wDQYJ
 # YIZIAWUDBAIBBQCggYQwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAvBgkqhkiG9w0BCQQxIgQgaCaIbsP19CS4YLpNmWsguFiunCVflC+xnsF29shW
-# HyAwDQYJKoZIhvcNAQEBBQAEggIAnYV3/QFwVDb20/E6fiLs/UAUeLNodoFfHj6+
-# /ETwRYTB2fQAdpawVe+5d5ME7ZQ/3MwHR9H55vKP/ASGGEFNCPJRMHS+7fDDzpje
-# rJc71rsFyQ26BifsY/yVGfidmpyGAGGxvXWe06xbMNLO3bMJOlUGcpC1hMWcfgzE
-# WZe68cylsI1J36r+nkDdsVLLlZzGOhponAAOJ+NhVYxOZzajoJ6n6vRVLFi18QWW
-# xN0YIzuGTX5tarVcpnFTs90/BSUarjYdOPGXf//MQdIZSSwCP+ttHEww0JGdqBnr
-# icTS3qqHL1+irtv2J5yx3LAh2DVdRYiZaldAjOz4lV0N5BGoz1aPeOIRf46HLLIh
-# +Ef8niTMoWQxxiLqtQUB1U7o2+wBLRV8z2afigegP0o4B+o3I4Q9ravX8DNTOeht
-# TB2NhF/vJBTqYtzzwv4QR5hPkCCCN7A6QR8K92OeVUTs6OmmkUGbIojtsCWE56fk
-# oCad1HSD9Ks/MwI3FfwAZZrxTyANrWycCTqvV1+oo8fyWhD56qoYa+Zi+K/hcD1q
-# NQOQbDxrtPajn8eXzwcoQSUcVp/XJPwdloW4hgmZBiMNSrwfN9BJRwD776QUaled
-# tCpjU4xAPHong+ld95ygtf/tSQuas1pI9xYwHf+q2NjsJHdrkqdWISTiijQNZIEB
-# 1QInerI=
+# FTAvBgkqhkiG9w0BCQQxIgQgl3LSUcHxRNizaAdmlZrKFq4mLnoJUBBA/y69wIMh
+# LQQwDQYJKoZIhvcNAQEBBQAEggIAl5IpiJWmlnOa/Vsxb5IAcASFOHb3KpFlr7jY
+# dvbC2diuPXg0ks4alS+O7KKULaJOPcxrMORsZ/qT17+LiFRdFF0k5EY3bSgcsRpB
+# oh65rtGI/Dm6zK6diMrptba5ylIbrn/X/HHtFgpiaM/hl1jtV2sCZ5Tqs2yihcUt
+# 5JC+fxymKlPNtaVhUnlSqAhqEgx6I8TWV081XW3dzdX9n6Pac0ev5zRkN2wAnr7u
+# aAdpwe4gBOcZRtxlUSCvfWdrbFQ1GChWvjD7WiPYPk3Ci9CkhlcMZgdMLdx9ukkE
+# 8LryoiKbF+SQ6IrhrVMlKO0CXXoJGu2O/7LyJEC0uEcSUefUFoQVWL0Sq0V2RxCZ
+# uCNX4/NoDW0e5WFw04/+OjljCa6VxSpJSrq+wrrymKxd/blgKkgUKTUxHBmxWRRE
+# QFDuekoaHHa6CUcFHUUVqDkHYYzTn4a50GamXvLYos/WWoyJziCh195uh0MnfPgj
+# pol/EskZvcghmqm1d0kNmQgNsC7RVVZio6uw5ztw1XxQMeEENX/FwWYgUS+6bIS7
+# N2xgh0513oq9rUnW+jZtKl9E5VyjNT20x2QIogX8QWIctjjglGE9ydBlTlK5I9TV
+# zDYDzMVvL4tvMK0xEMZFPMiq41dRFTl6M/qBjZbQNPu5Eiv9JOI6mzqpmVVh/a1/
+# bfo2Zwk=
 # SIG # End signature block
