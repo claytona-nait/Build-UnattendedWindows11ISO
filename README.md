@@ -34,6 +34,13 @@ that reads ISO images directly, such as [7-Zip](https://www.7-zip.org/), PeaZip 
 With the folder named `Windows11` the script's defaults line up and it runs with no
 parameters. Any other folder name works too, you just pass it with `-UnpackedFolderPath`.
 
+The script does not write answer files, but it does look for one. If there is no
+`autounattend.xml` in the folder root it warns that the ISO will be ordinary install
+media. If the file is there it is parsed, and a file that is not well-formed XML or does
+not have the Windows Setup `unattend` root element stops the build, since Setup would
+silently ignore it and the install would sit at the first interactive screen. Pass
+`-SkipUnattendCheck` when plain media is what you want.
+
 ## Boot files
 
 The script does not ship any boot code of its own. It points `oscdimg` at files that are

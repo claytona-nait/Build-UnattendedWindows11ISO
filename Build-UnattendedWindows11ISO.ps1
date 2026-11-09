@@ -36,6 +36,11 @@ if it is left in a drive. Without this switch the no-prompt image is preferred.
 Overwrites an existing ISO at `OutputISOPath`. Without this switch the script stops rather than replace a file that
 is already there. A locked ISO, such as one still attached to a running VM, cannot be overwritten either way.
 
+.PARAMETER SkipUnattendCheck
+Skips the answer file check. By default the script warns when there is no `autounattend.xml` in the root of the
+source folder, since the ISO would then be ordinary install media, and stops if the file is there but is not
+well-formed XML with the Windows Setup `unattend` root element. Pass this switch when plain media is the goal.
+
 .EXAMPLE
 PS> .\Build-UnattendedWindows11ISO.ps1 -UnpackedFolderPath "C:\Win11Files" -OutputISOPath "C:\Win11-Unattended.iso"
 Creates a bootable Windows 11 ISO from the unpacked files located in `C:\Win11Files` and saves it as `C:\Win11-Unattended.iso`.
@@ -72,7 +77,11 @@ param (
 
     [Parameter()]
     [switch]
-    $Force
+    $Force,
+
+    [Parameter()]
+    [switch]
+    $SkipUnattendCheck
 )
 
 # Validation runs here rather than in a [ValidateScript()] so it also covers the default folder.
@@ -92,6 +101,29 @@ $missing = $requiredFiles | Where-Object { !(Test-Path -Path (Join-Path -Path $U
 if ($missing) {
     Write-Error "Unable to locate the following in $UnpackedFolderPath`r`n  $($missing -join "`r`n  ")`r`nExtract the whole ISO, not just some of its folders."
     exit 1
+}
+
+# The script does not write answer files, but it can catch a missing or broken one here, where the fix is
+# a file copy, rather than at Windows Setup, where a bad autounattend.xml is silently ignored and the install
+# stops at the first interactive screen.
+if (!$SkipUnattendCheck) {
+    $unattendPath = Join-Path -Path $UnpackedFolderPath -ChildPath "autounattend.xml"
+    if (!(Test-Path -Path $unattendPath -PathType Leaf)) {
+        Write-Warning "No autounattend.xml in $UnpackedFolderPath. The ISO will be ordinary install media. Pass -SkipUnattendCheck to silence this."
+    } else {
+        try {
+            $unattendXml = [xml](Get-Content -Path $unattendPath -Raw -ErrorAction Stop)
+        } catch {
+            Write-Error "autounattend.xml is not well-formed XML, Windows Setup would ignore it: $($_.Exception.Message)"
+            exit 1
+        }
+        $root = $unattendXml.DocumentElement
+        if ($root.LocalName -ne "unattend" -or $root.NamespaceURI -ne "urn:schemas-microsoft-com:unattend") {
+            Write-Error "autounattend.xml does not have the <unattend xmlns=`"urn:schemas-microsoft-com:unattend`"> root element Windows Setup expects, found <$($root.Name)>"
+            exit 1
+        }
+        Write-Host "Found autounattend.xml, parsed as a Windows Setup answer file"
+    }
 }
 
 # Prefer the no-prompt UEFI boot image so an unattended install does not stall on "Press any key",
@@ -164,8 +196,8 @@ if (!(Test-Path -Path $localOSCDPath)) {
 # SIG # Begin signature block
 # MIIQ4QYJKoZIhvcNAQcCoIIQ0jCCEM4CAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCC/U06P1Rz+hv8E
-# P84DUVC9ykLUFO3nKY7FG/F/ABgFgKCCDSYwggWgMIIEiKADAgECAhMSAAAGp51a
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAfutQzpskyh606
+# wcPwFwQ5+EryhyvRK7bZP/hBKUEPEqCCDSYwggWgMIIEiKADAgECAhMSAAAGp51a
 # CZ27OHNaAAIAAAanMA0GCSqGSIb3DQEBCwUAMEcxEjAQBgoJkiaJk/IsZAEZFgJj
 # YTEUMBIGCgmSJomT8ixkARkWBG5haXQxGzAZBgNVBAMTEk5BSVQgRW50ZXJwcmlz
 # ZSBDQTAeFw0yNDAxMTgxODM0MzZaFw0yOTAxMTYxODM0MzZaMEgxEjAQBgoJkiaJ
@@ -240,17 +272,17 @@ if (!(Test-Path -Path $localOSCDPath)) {
 # BAMTE05BSVQgU3Vib3JkaW5hdGUgQ0ECExkBUcYvYP5WFMgEx20ABgFRxi8wDQYJ
 # YIZIAWUDBAIBBQCggYQwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAvBgkqhkiG9w0BCQQxIgQgfXOP1V+KGLXWgRzzRFOarBb6rLJArP3InGiWP4qz
-# KyowDQYJKoZIhvcNAQEBBQAEggIAEe4ANgalNgP92YvHH1t1L1Cgn61SXWkkwSsH
-# OZHyuE2ijmrjKmcc//Ma/Sg3omERioxFlQXpGHu2BESj35mX9H7wB0DcONy5Ljnk
-# 61QBP9XsglO7wJJEpbw+vdeo1a2GwfQ7DYfT1RzTlnc/qSYimcjmV2mw44ElLVi2
-# jc3PYAn7LJ0Kry0dfdNqZVsbHNsLw+Ejb2kM6bSHnNokWin3TUyNtODWQBB8HluI
-# c8jBxgSrbJE8PJ7ndyf2F859b1qgPZWSH979YvUtwlgADYv3eY3ytT0RymNm1eYI
-# pKBpZBy+FUrEAbK/0JJrAC/VUAxtPSydSDzLW/yNV5FAEded/k328OBu7qFObBBm
-# QqWRocBth+N2AuRLKfXlucUCOqOSvz/g0Epb9ekv17I6kjuDCr8Iak+r24eQNQvi
-# iHkbUpn9YOei9eibnUNtF3f/ffvgEgMayRZpLhzLjIHjvErctbNAUP6TcFE1plOH
-# iY7G6T9X/irvZnOdgNcMGASzp7R4r1JHEM+aW32uIOHmz4xxi6MqIbN3WSwdHOB3
-# Vg1p+F+K2odItAnUBp6ipFcmgAWXADZEbWBRzE8x0xfIwVLEfL7lraietJAEiE/3
-# 3hyujIXPwWanGF+RHhfqj8iBQPZEvPPcnNp630DEYAxEo7cM0iGyEBOIK0KtpaRd
-# cymWDxw=
+# FTAvBgkqhkiG9w0BCQQxIgQg+1TlHReo1VY0Jgng84rqJ4FeEVf/LxLfNudDD4r+
+# QS4wDQYJKoZIhvcNAQEBBQAEggIAAzFxopQYrqSu/yLBorPAQqg+0/Ltoy6oCPnF
+# Dsu7heHlFV7Ufpeqh/JIdEjMB++lv1XpE07AO2jL4wfdayz/xEVQ6y2p6L8YGzZi
+# Gv3Vw3DKkGin8s4wP0gfR9fWepBy7oP22LhOHqZKloKqCtBknUuLpJOXG716KmOn
+# ZGmK3VQRiHjj8JmQb3IZXxVhYn1epao0bcBUplQlJteNGgSpmYzBc5+7HUDXDA0a
+# swFBaIGTxNVjZ/NcGeiJuvTbN9yDzrFup8ExDYOzxVvdQ+JcGQltAgJSD39/Piee
+# dphdgqJlhjN3p7hLu+IXtu17Wwq4rODxBirXYmNDsc1TjnW0G/HMmqR3ZYw+79Gy
+# cyYpX3iztUfm9XBVKJvR4Q31AplvDTaivjE5AhTAdpdPfkHdJ0RbKmA4YhXLC92h
+# Q9GgEKCbuf1PGCh9r/rSxYxDDycYDaByWhByU+q6QAqCSglLDftIsTMiBbOrLEh7
+# xzyK8f8G2ffSXfxfvcQ5y0EC7527R2oIqMuf56xmDpdIHSpj3TJfBUHKoKD6X1+S
+# gZfsLKWZYsUrFRod2VubtDm5U/uW62w0xj7EL+DmKjsp9sbrfpT/j3lH+NUjEGiS
+# Nlyl32WMGrG/TREk4K5/lXsRMkACv9VIdioWt8xB606CBsNPDUuiMLqJLtjW8EYl
+# QJVu+5s=
 # SIG # End signature block
