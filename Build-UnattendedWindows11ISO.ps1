@@ -47,6 +47,11 @@ media. Letters, digits, underscore and hyphen only, up to 32 characters. Without
 which makes every ISO look alike.
 Default: Win11_Unattended
 
+.PARAMETER SkipHash
+Skips the SHA256 hash of the finished ISO. By default the script hashes the ISO, prints the value in the build
+summary and writes it beside the ISO as `<name>.iso.sha256.txt`, so the file handed to students can be checked
+against the one that was built. Hashing a full Windows ISO takes a little while, so skip it for throwaway builds.
+
 .EXAMPLE
 PS> .\Build-UnattendedWindows11ISO.ps1 -UnpackedFolderPath "C:\Win11Files" -OutputISOPath "C:\Win11-Unattended.iso"
 Creates a bootable Windows 11 ISO from the unpacked files located in `C:\Win11Files` and saves it as `C:\Win11-Unattended.iso`.
@@ -91,8 +96,14 @@ param (
 
     [Parameter()]
     [string]
-    $VolumeLabel = "Win11_Unattended"
+    $VolumeLabel = "Win11_Unattended",
+
+    [Parameter()]
+    [switch]
+    $SkipHash
 )
+
+$buildTimer = [System.Diagnostics.Stopwatch]::StartNew()
 
 # Validation runs here rather than in a [ValidateScript()] so it also covers the default folder.
 # PowerShell skips parameter validation when the caller does not supply a value.
@@ -220,13 +231,38 @@ if (!(Test-Path -Path $OutputISOPath -PathType Leaf)) {
     Write-Error "oscdimg.exe returned 0 but no ISO was written to $OutputISOPath"
     exit 1
 }
+
+# Summarise what was built. When a student reports a problem, this is what identifies the ISO they have.
+$iso = Get-Item -Path $OutputISOPath
+$summary = [ordered]@{
+    "ISO"          = $iso.FullName
+    "Size"         = "{0:N2} GB" -f ($iso.Length / 1GB)
+    "Volume label" = $VolumeLabel
+    "UEFI boot"    = Split-Path -Path $efiBoot -Leaf
+    "Answer file"  = if (Test-Path -Path (Join-Path -Path $UnpackedFolderPath -ChildPath "autounattend.xml") -PathType Leaf) { "autounattend.xml included" } else { "none, plain install media" }
+}
+if (!$SkipHash) {
+    Write-Host "Hashing the ISO..."
+    $hash = (Get-FileHash -Path $iso.FullName -Algorithm SHA256).Hash
+    $hashPath = "$($iso.FullName).sha256.txt"
+    Set-Content -Path $hashPath -Value $hash -Encoding Ascii
+    $summary["SHA256"] = $hash
+    $summary["Hash file"] = $hashPath
+}
+$summary["Build time"] = "{0:mm\:ss}" -f $buildTimer.Elapsed
+Write-Host ""
+Write-Host "Build complete"
+$width = ($summary.Keys | Measure-Object -Property Length -Maximum).Maximum
+foreach ($key in $summary.Keys) {
+    Write-Host ("  {0,-$width}  {1}" -f $key, $summary[$key])
+}
 exit 0
 
 # SIG # Begin signature block
 # MIIQ4QYJKoZIhvcNAQcCoIIQ0jCCEM4CAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCDoYpPSFIx0t7pN
-# dTrP9PDUgPSr09Tx1qAQLGH1o2uZp6CCDSYwggWgMIIEiKADAgECAhMSAAAGp51a
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBSIOGQaVBbEOGg
+# GP0Knqnoe7Py/kQQptCvEp4XeImT7qCCDSYwggWgMIIEiKADAgECAhMSAAAGp51a
 # CZ27OHNaAAIAAAanMA0GCSqGSIb3DQEBCwUAMEcxEjAQBgoJkiaJk/IsZAEZFgJj
 # YTEUMBIGCgmSJomT8ixkARkWBG5haXQxGzAZBgNVBAMTEk5BSVQgRW50ZXJwcmlz
 # ZSBDQTAeFw0yNDAxMTgxODM0MzZaFw0yOTAxMTYxODM0MzZaMEgxEjAQBgoJkiaJ
@@ -301,17 +337,17 @@ exit 0
 # BAMTE05BSVQgU3Vib3JkaW5hdGUgQ0ECExkBUcYvYP5WFMgEx20ABgFRxi8wDQYJ
 # YIZIAWUDBAIBBQCggYQwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAvBgkqhkiG9w0BCQQxIgQgl3LSUcHxRNizaAdmlZrKFq4mLnoJUBBA/y69wIMh
-# LQQwDQYJKoZIhvcNAQEBBQAEggIAl5IpiJWmlnOa/Vsxb5IAcASFOHb3KpFlr7jY
-# dvbC2diuPXg0ks4alS+O7KKULaJOPcxrMORsZ/qT17+LiFRdFF0k5EY3bSgcsRpB
-# oh65rtGI/Dm6zK6diMrptba5ylIbrn/X/HHtFgpiaM/hl1jtV2sCZ5Tqs2yihcUt
-# 5JC+fxymKlPNtaVhUnlSqAhqEgx6I8TWV081XW3dzdX9n6Pac0ev5zRkN2wAnr7u
-# aAdpwe4gBOcZRtxlUSCvfWdrbFQ1GChWvjD7WiPYPk3Ci9CkhlcMZgdMLdx9ukkE
-# 8LryoiKbF+SQ6IrhrVMlKO0CXXoJGu2O/7LyJEC0uEcSUefUFoQVWL0Sq0V2RxCZ
-# uCNX4/NoDW0e5WFw04/+OjljCa6VxSpJSrq+wrrymKxd/blgKkgUKTUxHBmxWRRE
-# QFDuekoaHHa6CUcFHUUVqDkHYYzTn4a50GamXvLYos/WWoyJziCh195uh0MnfPgj
-# pol/EskZvcghmqm1d0kNmQgNsC7RVVZio6uw5ztw1XxQMeEENX/FwWYgUS+6bIS7
-# N2xgh0513oq9rUnW+jZtKl9E5VyjNT20x2QIogX8QWIctjjglGE9ydBlTlK5I9TV
-# zDYDzMVvL4tvMK0xEMZFPMiq41dRFTl6M/qBjZbQNPu5Eiv9JOI6mzqpmVVh/a1/
-# bfo2Zwk=
+# FTAvBgkqhkiG9w0BCQQxIgQgSME6VmeTavnwAIhEhhlLuW+/caKAJ8d3xC5pOVFI
+# oYQwDQYJKoZIhvcNAQEBBQAEggIAGVBqj/nnybRHVkeCVIItjJjaeKmbD94d+w4b
+# TyTEeBsiZPrXVAIfivN4/XI1sbhT7jUT/uc0RsnNlQHItlm2Jm1AkF/O0d4doLXk
+# 4L0ESt25LpaJnqKXDDiyCgNQtWc3QxPKx03bECbDca8gY+/Pv1pKeC/5ggqUd9Jw
+# ri9M56Imt9HRVUQ4/HvD4j6ay7OGaKVsAaZpCm6P+wecc4wypMie79/VErtRAILK
+# YMyXaellK7efTMcgwGmGmvq+5Oq4ZcsUx4PJHUeVw/mkCjS1VWjJlzBFWMDtPplz
+# BOJ/1W1E2sSNxkQL/NlbyDOOVuCjiNwIa7JaWKdKcGy1f5z1B/c6fm0clPPvChvh
+# +9zlB/27Z35nFv+qcnCHoZ8059yH2e9rmn5aZKKvJFaSrYMchh1IFNTJU4BdVaRC
+# FYGp6jvVGIHWw2W9UGVBc0GCOOd6lfb2kowBRJGIt126Vf1hmvRVGbzJp66lhuJU
+# EvWJcPKzotILMGMn0WGoMe2jQZ0KwC99g5FeNRkrnkFEh6J+id1+DyCMncEEr7uw
+# R1YCL6PGJ7eQMSfYZP8iGbJRg2iZb7FTZNdM2SSeQHaLMYVAwWxehpBULQFQa4CF
+# H0LLH/tMjw9Io2EUgwoNcQwUNX2RnRl0N5i3yQdZogq0wV+CVmJLFLNfU49O14PD
+# V39yNT4=
 # SIG # End signature block

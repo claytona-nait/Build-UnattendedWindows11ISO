@@ -89,6 +89,12 @@ The script exits 0 only when `oscdimg` succeeded and the ISO is on disk. A faile
 exits 1, and an `oscdimg` failure exits with `oscdimg`'s own code, so a calling script
 can test `$LASTEXITCODE` instead of parsing the output.
 
+A successful build ends with a summary: the ISO path and size, the volume label, which
+UEFI boot image went in, whether an answer file was included, the SHA256 of the ISO and
+the build time. The hash is also written beside the ISO as `<name>.iso.sha256.txt`, so
+the copy a student has can be checked against the one that was built. Pass `-SkipHash`
+to leave the hash out of a quick test build.
+
 Related: the `course-lab-build` repo has `New-NoPromptIso.ps1`, which does the
 narrower job of removing the "press any key to boot" prompt from a Server ISO.
 
