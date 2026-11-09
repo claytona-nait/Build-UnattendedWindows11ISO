@@ -45,8 +45,9 @@ well-formed XML with the Windows Setup `unattend` root element. Pass this switch
 .PARAMETER VolumeLabel
 Sets the ISO volume label, which is what Hyper-V, File Explorer and the Windows Setup logs show for the mounted
 media. Letters, digits, underscore and hyphen only, up to 32 characters. Without a label oscdimg writes `DVD_ROM`,
-which makes every ISO look alike.
-Default: Win11_Unattended
+which makes every ISO look alike. When omitted the label follows the same rule as the output name: `Win11_Unattended`
+if the source folder has an `autounattend.xml`, otherwise `Win11`.
+Default: Win11_Unattended or Win11, see above
 
 .PARAMETER SkipHash
 Skips the SHA256 hash of the finished ISO. By default the script hashes the ISO, prints the value in the build
@@ -98,7 +99,7 @@ param (
 
     [Parameter()]
     [string]
-    $VolumeLabel = "Win11_Unattended",
+    $VolumeLabel,
 
     [Parameter()]
     [switch]
@@ -210,6 +211,10 @@ if (Test-Path -Path $OutputISOPath -PathType Leaf) {
 }
 
 # Give the ISO a label that says what it is. oscdimg defaults to DVD_ROM, so every build looks alike once mounted.
+# The default follows the output name, so plain media and unattended media are told apart once mounted too.
+if ([string]::IsNullOrEmpty($VolumeLabel)) {
+    $VolumeLabel = if ($hasUnattend) { "Win11_Unattended" } else { "Win11" }
+}
 if ($VolumeLabel -notmatch '^[A-Za-z0-9_\-]{1,32}$') {
     Write-Error "Volume label must be 1 to 32 characters of letters, digits, underscore or hyphen: $VolumeLabel"
     exit 1
@@ -271,8 +276,8 @@ exit 0
 # SIG # Begin signature block
 # MIIQ4QYJKoZIhvcNAQcCoIIQ0jCCEM4CAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAK5JqpkbC8Cl/S
-# QQQdGgQY2YzKK6b1MpaZAZh+QeK2KKCCDSYwggWgMIIEiKADAgECAhMSAAAGp51a
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBqDc6u3O3SW1Dm
+# 9mgZBVen9H/+Y+L0u14ZxQuwiu51hqCCDSYwggWgMIIEiKADAgECAhMSAAAGp51a
 # CZ27OHNaAAIAAAanMA0GCSqGSIb3DQEBCwUAMEcxEjAQBgoJkiaJk/IsZAEZFgJj
 # YTEUMBIGCgmSJomT8ixkARkWBG5haXQxGzAZBgNVBAMTEk5BSVQgRW50ZXJwcmlz
 # ZSBDQTAeFw0yNDAxMTgxODM0MzZaFw0yOTAxMTYxODM0MzZaMEgxEjAQBgoJkiaJ
@@ -347,17 +352,17 @@ exit 0
 # BAMTE05BSVQgU3Vib3JkaW5hdGUgQ0ECExkBUcYvYP5WFMgEx20ABgFRxi8wDQYJ
 # YIZIAWUDBAIBBQCggYQwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAvBgkqhkiG9w0BCQQxIgQgbM8umdZ04iyWxfqvNjhWW4naMTQ+tdAUExDlhbFJ
-# WjcwDQYJKoZIhvcNAQEBBQAEggIAnblEUeUBttL1Y07j96C+dtNmAvZIFrfW3WU8
-# DoOSL8/UN1xlQ1IAxRlBOyY3ljakUtm0xbs5miEqmCkMCGDwELLSHxdYDVn1/7yk
-# XlxaC80OojR+ya4uEW/O1DUAGStA60CbyK85fGEUc/CoBvtTgWWs5mAQsf6FQphv
-# +38l2tTH8JV+YUe3eWEd4ai8ti0Gbo3db+Iu1gEl1KFclkjp14hILBZB20XOi+Aw
-# ozyHNONlZCnK9s1o9AkSCoyllqzChjHQjSKN3ibbeQFlyWbBnBu5T3htBT/hM1fp
-# /iJ9Cekm1i2rND6jfeK4oWQjdd+oizEj1Bk22CwteD0KQTriHUjHGM+uLt5rAXCg
-# 2ZuRtqnPusl/v0Ui1+nS9tVtnGUz7gOm28nMxbjuLK6CB2fmvgrC9LJvKBZ+0HJy
-# xqotj0Rkovphyiimpo1j54FjZdgzrMCsmg3r6rwybY4QRfwS4lpNHO0EfnePbvHD
-# K8QtCoxbm7hH/E4pzEHI6V90o4BuKb5A0koWFlUG6jAT439nW92ceNDz1+MMxSsx
-# pU/9EeEvP9V5Gri+IbOfJKu0NYsy9Xw0lEmcgk7B2hutLIRHnhx++9FJo3/Uhgbm
-# eeIpzcgcJGz3hEDoT+JResO88awTpWthANJgQPMHGFdujmxBLVmeDqblg5RQUglL
-# t6WGdE0=
+# FTAvBgkqhkiG9w0BCQQxIgQgojmUThwQAuiuWQ2WRTe8DPoLLLCocYyli7OVvkSO
+# JtAwDQYJKoZIhvcNAQEBBQAEggIARR6nSlwETu8nmxCSkrtf9CG2Qs1x4PS2NXLm
+# 9+gVuFZg0TxZ4hEpAbwoquPZLxR3mimLQc8Gc5Rs9oN1VAWN/En42qJbp0P0KsdB
+# Ty7QkVT/C1sCCJJ9FnZXIV12BiX06RFvKQJXRxWiFo3OdHHg5TyrbnK+oSK1tbJw
+# RjCzqDqOyr3XyI0Mp/swOX3Rp2dwGd3M/OxFpzlUxdYY8dHQmjdncyo0axh2xs5a
+# 3yTttdO/tcDdn1jAZynndNFw9yC0Pzu0IeTbt4tizCml367NostgjGqxKpFWCbUh
+# VXlq43jGlKdYMwSEli1p7XSt9MhM/5yI/auzQguBPAjCFZEEk1NDJfSVT72uZCEw
+# 9hqslEZUzLB7iHJWm8Mm+CggS2tye69a2ACYS82GPepuDOqVp5+5IJ2+W6njfYRV
+# hfCvd8dJrxRZ80kwXQrARqTW06hJzzu5Qk79EJL0A+O3mfQ6cpSBmUQBp05H1Ngs
+# DXYwcImeWrFt1biJnQKo8TgJNjE8U8B7T7REYRr41oODp1B6+1quglttDnHjns3C
+# GDdWXLTgKVVF8PT7QhgSrNAjmZd0lssPnGW9u3dl5ZtoKJ6IwbfquxMiAwurPjAX
+# FuAUDfTzZgdI1C6Zo0AYm/G/i5ilxmSVTYWRQeOGm6ZWkUawGqt0/FUWRI/VRnww
+# HdQ8+pk=
 # SIG # End signature block

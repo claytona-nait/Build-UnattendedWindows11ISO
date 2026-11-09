@@ -83,8 +83,9 @@ prompt in the built ISO, and `-Force` to overwrite an ISO that is already at the
 path. The script checks the output folder exists and refuses to write the ISO inside the
 source folder before it starts `oscdimg`.
 
-The ISO gets the volume label `Win11_Unattended` instead of oscdimg's default `DVD_ROM`,
-so a mounted image says what it is. Pass `-VolumeLabel` to set your own, up to 32
+The ISO gets a volume label instead of oscdimg's default `DVD_ROM`, so a mounted image
+says what it is. The label follows the same rule as the file name: `Win11_Unattended`
+with an answer file, `Win11` without. Pass `-VolumeLabel` to set your own, up to 32
 characters of letters, digits, underscore or hyphen.
 
 The script exits 0 only when `oscdimg` succeeded and the ISO is on disk. A failed check
