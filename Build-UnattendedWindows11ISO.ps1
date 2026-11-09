@@ -82,6 +82,15 @@ Builds from the default paths but boots with `efisys.bin`, so the ISO still asks
 Author: Clayton Amelia
 Version: 1.5.0
 Requires: PowerShell 5.1 or later. Either a local oscdimg.exe, the Windows ADK Deployment Tools, or winget with Internet access
+License: CC BY-NC-SA 4.0. Share and adapt for non-commercial use, credit the author, and release derivatives under the
+same licence. oscdimg.exe and Windows media are Microsoft's and are not covered. Full terms in LICENSE.md alongside
+this script in its repository.
+
+.LINK
+https://github.com/claytona-nait/Build-UnattendedWindows11ISO
+
+.LINK
+https://creativecommons.org/licenses/by-nc-sa/4.0/
 #>
 param (
     [Parameter(Position=0)]
@@ -363,8 +372,8 @@ exit 0
 # SIG # Begin signature block
 # MIIQ4QYJKoZIhvcNAQcCoIIQ0jCCEM4CAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAzG3wNNZfSIA8I
-# +FHxD86qE0+C8RwcG6m4SpWvjSXNRqCCDSYwggWgMIIEiKADAgECAhMSAAAGp51a
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBXAIzfN3m/aOGD
+# Knhobt1Nqkjd4JoN0VtRLGu/gnq1PqCCDSYwggWgMIIEiKADAgECAhMSAAAGp51a
 # CZ27OHNaAAIAAAanMA0GCSqGSIb3DQEBCwUAMEcxEjAQBgoJkiaJk/IsZAEZFgJj
 # YTEUMBIGCgmSJomT8ixkARkWBG5haXQxGzAZBgNVBAMTEk5BSVQgRW50ZXJwcmlz
 # ZSBDQTAeFw0yNDAxMTgxODM0MzZaFw0yOTAxMTYxODM0MzZaMEgxEjAQBgoJkiaJ
@@ -439,17 +448,17 @@ exit 0
 # BAMTE05BSVQgU3Vib3JkaW5hdGUgQ0ECExkBUcYvYP5WFMgEx20ABgFRxi8wDQYJ
 # YIZIAWUDBAIBBQCggYQwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAvBgkqhkiG9w0BCQQxIgQgNXeWLdiQEhnDir1kRvvbix9GyJLXzMrdIFc15gVB
-# XpwwDQYJKoZIhvcNAQEBBQAEggIAnX80mFrCBCnaLPYklgIU3xT1wWjutOu7Ry9m
-# iDMl9g0pS00Xd0JZZ5IQx3BNCUSWy5ZD50sOauf+NZRh8l2GxA8R8l3ft12iZo6H
-# VVRKqtK80IoiEwuHTJ8lYCpfPIMatAx5xZhcCgLhF6OcPjbSQ2jvL/xD+/vi9r6Z
-# nzwGUsCykAf4Ordmt84sPHm+VL4OXU7k3LDjcGrcZh4zkdQL3ooB2/X4fMeAH6bF
-# R8/lqZLchOwiCGQEQUog5taLX/zSki39LiS7FtDlcmj+lMXZNRPXhQrTN8EOlI41
-# uXQOHcoIMUC298gxqT9RV0lrKQpspiuhe+PRzHPHWosH+b666LkWNPurpcNufkpb
-# 5bk/sD6eSRGB9n31pA+IoDg6ykVw7E0MjR2WwHKGaeTIMIZjKLGlL6qz0psAIXLy
-# eS+tF3uawYB18J/w/1K9SdnFj5idQPOcWKQhQ19OAn7n+W476AIGc5L6F7x/W1s2
-# QHWMCid43oCac1T3i4519xo+dNYRH7PUqgI4cX0EYCpQVgNJEXloF36krm3Fa6gl
-# ItJYLPvuW4eDwzVd0rAAs2NRC95hJ+mLnWW1nV5/6w5iMtQirYPyeB22yHbKLCHs
-# p/GrVUCj4a9JORyNicZJ8tPmnw65WA7lH3+Y5e0SYUgIVcs+Yo8Rdzzxd+xRxrRn
-# DatI+C0=
+# FTAvBgkqhkiG9w0BCQQxIgQgmSHPxPS8aRsCcOUZYBqnSFnYWToSW2CFFoitFK5P
+# DR8wDQYJKoZIhvcNAQEBBQAEggIAnGU0TjegjFQJ5bKqt6xLtqB4qu/44KKMd/id
+# pgWUXQnG2N5KA3D3++fRctWmr6xZ597lIMtB5pEFyosJEdQiNxG1N4YsyuU4dHpW
+# 1fgveC1sKz1Xoni1TSogM7shCHNviZUsdAlEU/OHKMcYqT4p7/PT9XAuu6V7/0Li
+# JrQTU4Qu8/xpuLKA13+g1tL6QLInNyqnx3WUVXb+qeul5e0sb0Qkn2mOxFnvHwUN
+# lV7xQ6Kw17sQV1M25iYZmINjUSecGwJ5buBQCkitT5iV4UUuP0jQl1aiNWGiXPiH
+# 6/gzmbXfA85WoSKQXUWaqknI7IdLs0ernVbvSx9c94gvvdOOnnwalpX2GRjflIO/
+# II8OPLhyjcUHxLDu8gHgAEtmGUKSNs4+CYyFTHY3O4evIy3Zlh9JJQqzlknTLnCz
+# bx4euPShnaPUXoF+Wf7bUw9Olk3gI2ZqBTIs1Hw7aDTEMLfb2kxkMjDTAGF6aUSB
+# 0NeHYvYgC2WzUZPmiPb9vpT3b/moBh804Cva7EtngyIuKgTDuewhhRYh/pEtGMPO
+# 556TloYN1+iN1Hzo870mSXRvnwQnyRfwHtk3EDIekXyPB3ocRURTboVBD/uHJqkn
+# Bp8Mz21G8KWYmwNWBZ01g89VG4PmOgfLas/Gy0ecKrGWVBatc4R5WaQOVsM2FVP2
+# 0YCCOmM=
 # SIG # End signature block
