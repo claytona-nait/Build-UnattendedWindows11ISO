@@ -75,8 +75,10 @@ From the folder:
 .\Build-UnattendedWindows11ISO.ps1 -UnpackedFolderPath 'C:\Win11Files' -OutputISOPath 'C:\Win11-Unattended.iso'
 ```
 
-Defaults are `.\Windows11` for the source, `.\Windows11-Unattended.iso` for the
-output and `.\oscdimg.exe` for the tool. Add `-KeepPrompt` to keep the "Press any key"
+Defaults are `.\Windows11` for the source and `.\oscdimg.exe` for the tool. The output
+defaults to `.\Windows11-Unattended.iso` when the source folder has an `autounattend.xml`
+and `.\Windows11.iso` when it does not, so the file name says which kind of media it is.
+Pass `-OutputISOPath` to choose your own. Add `-KeepPrompt` to keep the "Press any key"
 prompt in the built ISO, and `-Force` to overwrite an ISO that is already at the output
 path. The script checks the output folder exists and refuses to write the ISO inside the
 source folder before it starts `oscdimg`.

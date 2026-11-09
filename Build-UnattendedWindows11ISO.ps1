@@ -20,8 +20,9 @@ The folder must contain `sources\install.wim`, `sources\boot.wim`, `boot\etfsboo
 Default: .\Windows11
 
 .PARAMETER OutputISOPath
-Specifies the path and filename for the generated ISO image.
-Default: .\Windows11-Unattended.iso
+Specifies the path and filename for the generated ISO image. When omitted the name says what was built:
+`.\Windows11-Unattended.iso` if the source folder has an `autounattend.xml`, otherwise `.\Windows11.iso`.
+Default: .\Windows11-Unattended.iso or .\Windows11.iso, see above
 
 .PARAMETER localOSCDPath
 Specifies the local path to `oscdimg.exe`. If the file does not exist, it will be downloaded automatically.
@@ -58,7 +59,8 @@ Creates a bootable Windows 11 ISO from the unpacked files located in `C:\Win11Fi
 
 .EXAMPLE
 PS> .\Build-UnattendedWindows11ISO.ps1
-Uses default paths to create a bootable Windows 11 ISO from the `.\Windows11` folder and saves it as `.\Windows11-Unattended.iso`.
+Uses default paths to create a bootable Windows 11 ISO from the `.\Windows11` folder and saves it as `.\Windows11-Unattended.iso`,
+or as `.\Windows11.iso` if the folder has no `autounattend.xml`.
 
 .EXAMPLE
 PS> .\Build-UnattendedWindows11ISO.ps1 -KeepPrompt
@@ -76,7 +78,7 @@ param (
 
     [Parameter(Position=1)]
     [string]
-    $OutputISOPath = ".\Windows11-Unattended.iso",
+    $OutputISOPath,
 
     [Parameter(Position=2)]
     [string]
@@ -127,9 +129,10 @@ if ($missing) {
 # The script does not write answer files, but it can catch a missing or broken one here, where the fix is
 # a file copy, rather than at Windows Setup, where a bad autounattend.xml is silently ignored and the install
 # stops at the first interactive screen.
+$unattendPath = Join-Path -Path $UnpackedFolderPath -ChildPath "autounattend.xml"
+$hasUnattend = Test-Path -Path $unattendPath -PathType Leaf
 if (!$SkipUnattendCheck) {
-    $unattendPath = Join-Path -Path $UnpackedFolderPath -ChildPath "autounattend.xml"
-    if (!(Test-Path -Path $unattendPath -PathType Leaf)) {
+    if (!$hasUnattend) {
         Write-Warning "No autounattend.xml in $UnpackedFolderPath. The ISO will be ordinary install media. Pass -SkipUnattendCheck to silence this."
     } else {
         try {
@@ -170,6 +173,13 @@ if ($KeepPrompt) {
     exit 1
 }
 $biosBoot = Join-Path -Path $UnpackedFolderPath -ChildPath "boot\etfsboot.com"
+
+# Name the ISO after what it is when the caller did not choose a name, so plain media and
+# unattended media built from the same folder do not overwrite each other.
+if ([string]::IsNullOrEmpty($OutputISOPath)) {
+    $OutputISOPath = if ($hasUnattend) { ".\Windows11-Unattended.iso" } else { ".\Windows11.iso" }
+    Write-Host "Output ISO will be $OutputISOPath"
+}
 
 # Check the output path before oscdimg does, since its own errors for a missing folder or a locked
 # file are terse. The parent folder must exist, the ISO must not land inside the source tree where
@@ -239,7 +249,7 @@ $summary = [ordered]@{
     "Size"         = "{0:N2} GB" -f ($iso.Length / 1GB)
     "Volume label" = $VolumeLabel
     "UEFI boot"    = Split-Path -Path $efiBoot -Leaf
-    "Answer file"  = if (Test-Path -Path (Join-Path -Path $UnpackedFolderPath -ChildPath "autounattend.xml") -PathType Leaf) { "autounattend.xml included" } else { "none, plain install media" }
+    "Answer file"  = if ($hasUnattend) { "autounattend.xml included" } else { "none, plain install media" }
 }
 if (!$SkipHash) {
     Write-Host "Hashing the ISO..."
@@ -261,8 +271,8 @@ exit 0
 # SIG # Begin signature block
 # MIIQ4QYJKoZIhvcNAQcCoIIQ0jCCEM4CAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCBSIOGQaVBbEOGg
-# GP0Knqnoe7Py/kQQptCvEp4XeImT7qCCDSYwggWgMIIEiKADAgECAhMSAAAGp51a
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAK5JqpkbC8Cl/S
+# QQQdGgQY2YzKK6b1MpaZAZh+QeK2KKCCDSYwggWgMIIEiKADAgECAhMSAAAGp51a
 # CZ27OHNaAAIAAAanMA0GCSqGSIb3DQEBCwUAMEcxEjAQBgoJkiaJk/IsZAEZFgJj
 # YTEUMBIGCgmSJomT8ixkARkWBG5haXQxGzAZBgNVBAMTEk5BSVQgRW50ZXJwcmlz
 # ZSBDQTAeFw0yNDAxMTgxODM0MzZaFw0yOTAxMTYxODM0MzZaMEgxEjAQBgoJkiaJ
@@ -337,17 +347,17 @@ exit 0
 # BAMTE05BSVQgU3Vib3JkaW5hdGUgQ0ECExkBUcYvYP5WFMgEx20ABgFRxi8wDQYJ
 # YIZIAWUDBAIBBQCggYQwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAvBgkqhkiG9w0BCQQxIgQgSME6VmeTavnwAIhEhhlLuW+/caKAJ8d3xC5pOVFI
-# oYQwDQYJKoZIhvcNAQEBBQAEggIAGVBqj/nnybRHVkeCVIItjJjaeKmbD94d+w4b
-# TyTEeBsiZPrXVAIfivN4/XI1sbhT7jUT/uc0RsnNlQHItlm2Jm1AkF/O0d4doLXk
-# 4L0ESt25LpaJnqKXDDiyCgNQtWc3QxPKx03bECbDca8gY+/Pv1pKeC/5ggqUd9Jw
-# ri9M56Imt9HRVUQ4/HvD4j6ay7OGaKVsAaZpCm6P+wecc4wypMie79/VErtRAILK
-# YMyXaellK7efTMcgwGmGmvq+5Oq4ZcsUx4PJHUeVw/mkCjS1VWjJlzBFWMDtPplz
-# BOJ/1W1E2sSNxkQL/NlbyDOOVuCjiNwIa7JaWKdKcGy1f5z1B/c6fm0clPPvChvh
-# +9zlB/27Z35nFv+qcnCHoZ8059yH2e9rmn5aZKKvJFaSrYMchh1IFNTJU4BdVaRC
-# FYGp6jvVGIHWw2W9UGVBc0GCOOd6lfb2kowBRJGIt126Vf1hmvRVGbzJp66lhuJU
-# EvWJcPKzotILMGMn0WGoMe2jQZ0KwC99g5FeNRkrnkFEh6J+id1+DyCMncEEr7uw
-# R1YCL6PGJ7eQMSfYZP8iGbJRg2iZb7FTZNdM2SSeQHaLMYVAwWxehpBULQFQa4CF
-# H0LLH/tMjw9Io2EUgwoNcQwUNX2RnRl0N5i3yQdZogq0wV+CVmJLFLNfU49O14PD
-# V39yNT4=
+# FTAvBgkqhkiG9w0BCQQxIgQgbM8umdZ04iyWxfqvNjhWW4naMTQ+tdAUExDlhbFJ
+# WjcwDQYJKoZIhvcNAQEBBQAEggIAnblEUeUBttL1Y07j96C+dtNmAvZIFrfW3WU8
+# DoOSL8/UN1xlQ1IAxRlBOyY3ljakUtm0xbs5miEqmCkMCGDwELLSHxdYDVn1/7yk
+# XlxaC80OojR+ya4uEW/O1DUAGStA60CbyK85fGEUc/CoBvtTgWWs5mAQsf6FQphv
+# +38l2tTH8JV+YUe3eWEd4ai8ti0Gbo3db+Iu1gEl1KFclkjp14hILBZB20XOi+Aw
+# ozyHNONlZCnK9s1o9AkSCoyllqzChjHQjSKN3ibbeQFlyWbBnBu5T3htBT/hM1fp
+# /iJ9Cekm1i2rND6jfeK4oWQjdd+oizEj1Bk22CwteD0KQTriHUjHGM+uLt5rAXCg
+# 2ZuRtqnPusl/v0Ui1+nS9tVtnGUz7gOm28nMxbjuLK6CB2fmvgrC9LJvKBZ+0HJy
+# xqotj0Rkovphyiimpo1j54FjZdgzrMCsmg3r6rwybY4QRfwS4lpNHO0EfnePbvHD
+# K8QtCoxbm7hH/E4pzEHI6V90o4BuKb5A0koWFlUG6jAT439nW92ceNDz1+MMxSsx
+# pU/9EeEvP9V5Gri+IbOfJKu0NYsy9Xw0lEmcgk7B2hutLIRHnhx++9FJo3/Uhgbm
+# eeIpzcgcJGz3hEDoT+JResO88awTpWthANJgQPMHGFdujmxBLVmeDqblg5RQUglL
+# t6WGdE0=
 # SIG # End signature block
