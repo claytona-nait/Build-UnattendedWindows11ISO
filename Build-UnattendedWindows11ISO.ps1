@@ -41,6 +41,12 @@ Skips the answer file check. By default the script warns when there is no `autou
 source folder, since the ISO would then be ordinary install media, and stops if the file is there but is not
 well-formed XML with the Windows Setup `unattend` root element. Pass this switch when plain media is the goal.
 
+.PARAMETER VolumeLabel
+Sets the ISO volume label, which is what Hyper-V, File Explorer and the Windows Setup logs show for the mounted
+media. Letters, digits, underscore and hyphen only, up to 32 characters. Without a label oscdimg writes `DVD_ROM`,
+which makes every ISO look alike.
+Default: Win11_Unattended
+
 .EXAMPLE
 PS> .\Build-UnattendedWindows11ISO.ps1 -UnpackedFolderPath "C:\Win11Files" -OutputISOPath "C:\Win11-Unattended.iso"
 Creates a bootable Windows 11 ISO from the unpacked files located in `C:\Win11Files` and saves it as `C:\Win11-Unattended.iso`.
@@ -81,7 +87,11 @@ param (
 
     [Parameter()]
     [switch]
-    $SkipUnattendCheck
+    $SkipUnattendCheck,
+
+    [Parameter()]
+    [string]
+    $VolumeLabel = "Win11_Unattended"
 )
 
 # Validation runs here rather than in a [ValidateScript()] so it also covers the default folder.
@@ -178,6 +188,13 @@ if (Test-Path -Path $OutputISOPath -PathType Leaf) {
     }
 }
 
+# Give the ISO a label that says what it is. oscdimg defaults to DVD_ROM, so every build looks alike once mounted.
+if ($VolumeLabel -notmatch '^[A-Za-z0-9_\-]{1,32}$') {
+    Write-Error "Volume label must be 1 to 32 characters of letters, digits, underscore or hyphen: $VolumeLabel"
+    exit 1
+}
+Write-Host "Volume label will be $VolumeLabel"
+
 if (!(Test-Path -Path $localOSCDPath)) {
     $OSCDurl = "https://msdl.microsoft.com/download/symbols/oscdimg.exe/3D44737265000/oscdimg.exe"
     Write-Host "Downloading oscdimg.exe from $OSCDurl"
@@ -191,13 +208,13 @@ if (!(Test-Path -Path $localOSCDPath)) {
     }
 }
 
-& "$localOSCDPath" '-m' '-o' '-u2' '-udfver102' "-bootdata:2#p0,e,b$biosBoot#pEF,e,b$efiBoot" "$UnpackedFolderPath" "$OutputISOPath"
+& "$localOSCDPath" '-m' '-o' '-u2' '-udfver102' "-l$VolumeLabel" "-bootdata:2#p0,e,b$biosBoot#pEF,e,b$efiBoot" "$UnpackedFolderPath" "$OutputISOPath"
 
 # SIG # Begin signature block
 # MIIQ4QYJKoZIhvcNAQcCoIIQ0jCCEM4CAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAfutQzpskyh606
-# wcPwFwQ5+EryhyvRK7bZP/hBKUEPEqCCDSYwggWgMIIEiKADAgECAhMSAAAGp51a
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCAXbu6FWxdIakC
+# M3jaNP/oNLlNU2mW5JT2CLv7F2lo66CCDSYwggWgMIIEiKADAgECAhMSAAAGp51a
 # CZ27OHNaAAIAAAanMA0GCSqGSIb3DQEBCwUAMEcxEjAQBgoJkiaJk/IsZAEZFgJj
 # YTEUMBIGCgmSJomT8ixkARkWBG5haXQxGzAZBgNVBAMTEk5BSVQgRW50ZXJwcmlz
 # ZSBDQTAeFw0yNDAxMTgxODM0MzZaFw0yOTAxMTYxODM0MzZaMEgxEjAQBgoJkiaJ
@@ -272,17 +289,17 @@ if (!(Test-Path -Path $localOSCDPath)) {
 # BAMTE05BSVQgU3Vib3JkaW5hdGUgQ0ECExkBUcYvYP5WFMgEx20ABgFRxi8wDQYJ
 # YIZIAWUDBAIBBQCggYQwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAvBgkqhkiG9w0BCQQxIgQg+1TlHReo1VY0Jgng84rqJ4FeEVf/LxLfNudDD4r+
-# QS4wDQYJKoZIhvcNAQEBBQAEggIAAzFxopQYrqSu/yLBorPAQqg+0/Ltoy6oCPnF
-# Dsu7heHlFV7Ufpeqh/JIdEjMB++lv1XpE07AO2jL4wfdayz/xEVQ6y2p6L8YGzZi
-# Gv3Vw3DKkGin8s4wP0gfR9fWepBy7oP22LhOHqZKloKqCtBknUuLpJOXG716KmOn
-# ZGmK3VQRiHjj8JmQb3IZXxVhYn1epao0bcBUplQlJteNGgSpmYzBc5+7HUDXDA0a
-# swFBaIGTxNVjZ/NcGeiJuvTbN9yDzrFup8ExDYOzxVvdQ+JcGQltAgJSD39/Piee
-# dphdgqJlhjN3p7hLu+IXtu17Wwq4rODxBirXYmNDsc1TjnW0G/HMmqR3ZYw+79Gy
-# cyYpX3iztUfm9XBVKJvR4Q31AplvDTaivjE5AhTAdpdPfkHdJ0RbKmA4YhXLC92h
-# Q9GgEKCbuf1PGCh9r/rSxYxDDycYDaByWhByU+q6QAqCSglLDftIsTMiBbOrLEh7
-# xzyK8f8G2ffSXfxfvcQ5y0EC7527R2oIqMuf56xmDpdIHSpj3TJfBUHKoKD6X1+S
-# gZfsLKWZYsUrFRod2VubtDm5U/uW62w0xj7EL+DmKjsp9sbrfpT/j3lH+NUjEGiS
-# Nlyl32WMGrG/TREk4K5/lXsRMkACv9VIdioWt8xB606CBsNPDUuiMLqJLtjW8EYl
-# QJVu+5s=
+# FTAvBgkqhkiG9w0BCQQxIgQgaCaIbsP19CS4YLpNmWsguFiunCVflC+xnsF29shW
+# HyAwDQYJKoZIhvcNAQEBBQAEggIAnYV3/QFwVDb20/E6fiLs/UAUeLNodoFfHj6+
+# /ETwRYTB2fQAdpawVe+5d5ME7ZQ/3MwHR9H55vKP/ASGGEFNCPJRMHS+7fDDzpje
+# rJc71rsFyQ26BifsY/yVGfidmpyGAGGxvXWe06xbMNLO3bMJOlUGcpC1hMWcfgzE
+# WZe68cylsI1J36r+nkDdsVLLlZzGOhponAAOJ+NhVYxOZzajoJ6n6vRVLFi18QWW
+# xN0YIzuGTX5tarVcpnFTs90/BSUarjYdOPGXf//MQdIZSSwCP+ttHEww0JGdqBnr
+# icTS3qqHL1+irtv2J5yx3LAh2DVdRYiZaldAjOz4lV0N5BGoz1aPeOIRf46HLLIh
+# +Ef8niTMoWQxxiLqtQUB1U7o2+wBLRV8z2afigegP0o4B+o3I4Q9ravX8DNTOeht
+# TB2NhF/vJBTqYtzzwv4QR5hPkCCCN7A6QR8K92OeVUTs6OmmkUGbIojtsCWE56fk
+# oCad1HSD9Ks/MwI3FfwAZZrxTyANrWycCTqvV1+oo8fyWhD56qoYa+Zi+K/hcD1q
+# NQOQbDxrtPajn8eXzwcoQSUcVp/XJPwdloW4hgmZBiMNSrwfN9BJRwD776QUaled
+# tCpjU4xAPHong+ld95ygtf/tSQuas1pI9xYwHf+q2NjsJHdrkqdWISTiijQNZIEB
+# 1QInerI=
 # SIG # End signature block

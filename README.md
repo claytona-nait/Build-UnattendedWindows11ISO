@@ -81,6 +81,10 @@ prompt in the built ISO, and `-Force` to overwrite an ISO that is already at the
 path. The script checks the output folder exists and refuses to write the ISO inside the
 source folder before it starts `oscdimg`.
 
+The ISO gets the volume label `Win11_Unattended` instead of oscdimg's default `DVD_ROM`,
+so a mounted image says what it is. Pass `-VolumeLabel` to set your own, up to 32
+characters of letters, digits, underscore or hyphen.
+
 Related: the `course-lab-build` repo has `New-NoPromptIso.ps1`, which does the
 narrower job of removing the "press any key to boot" prompt from a Server ISO.
 
