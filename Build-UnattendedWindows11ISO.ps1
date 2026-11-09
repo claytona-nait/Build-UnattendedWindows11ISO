@@ -4,9 +4,9 @@ Creates a bootable Windows ISO from an unpacked installation source, ensuring re
 
 .DESCRIPTION
 This script automates the creation of a bootable Windows ISO image from an unpacked Windows installation folder.
-It validates that the source folder contains the installer images (`sources\install.wim` and `sources\boot.wim`) and the
-boot files oscdimg needs (`boot\etfsboot.com` for BIOS and `efi\microsoft\boot\efisys.bin` for UEFI), locates a
-trustworthy `oscdimg.exe`, and then uses it to generate the ISO.
+It validates that the source folder contains the installer images (`sources\boot.wim` and exactly one of
+`sources\install.wim` or `sources\install.esd`) and the boot files oscdimg needs (`boot\etfsboot.com` for BIOS and
+`efi\microsoft\boot\efisys.bin` for UEFI), locates a trustworthy `oscdimg.exe`, and then uses it to generate the ISO.
 
 `oscdimg.exe` is found in this order: the path given in `localOSCDPath`, then the Windows ADK Deployment Tools copy
 if the ADK is installed, then the `Microsoft.OSCDIMG` winget package, which winget downloads from Microsoft's symbol
@@ -22,8 +22,10 @@ Pass `-KeepPrompt` to use `efisys.bin` deliberately, for an ISO that should stil
 
 .PARAMETER UnpackedFolderPath
 Specifies the path to the unpacked Windows installation files.
-The folder must contain `sources\install.wim`, `sources\boot.wim`, `boot\etfsboot.com` and either
-`efi\microsoft\boot\efisys_noprompt.bin` or `efi\microsoft\boot\efisys.bin`.
+The folder must contain `sources\boot.wim`, `boot\etfsboot.com`, either `efi\microsoft\boot\efisys_noprompt.bin` or
+`efi\microsoft\boot\efisys.bin`, and exactly one install image, `sources\install.wim` or `sources\install.esd`. Media
+Creation Tool downloads ship the compressed `.esd`, retail ISOs ship the `.wim`, and Windows Setup accepts either, but a
+folder holding both is ambiguous and is rejected.
 Default: .\Windows11
 
 .PARAMETER OutputISOPath
@@ -126,7 +128,6 @@ if (!(Test-Path -Path $UnpackedFolderPath -PathType Container)) {
 $UnpackedFolderPath = (Resolve-Path -Path $UnpackedFolderPath).Path
 
 $requiredFiles = @(
-    "sources\install.wim",
     "sources\boot.wim",
     "boot\etfsboot.com"
 )
@@ -135,6 +136,20 @@ if ($missing) {
     Write-Error "Unable to locate the following in $UnpackedFolderPath`r`n  $($missing -join "`r`n  ")`r`nExtract the whole ISO, not just some of its folders."
     exit 1
 }
+
+# The install image is install.wim on retail ISOs and install.esd on Media Creation Tool downloads. Setup takes
+# either, so both are accepted here, but a folder with both is someone's half-finished conversion and is refused
+# rather than guessing which one Setup would pick.
+$installImages = @("install.wim", "install.esd") | Where-Object { Test-Path -Path (Join-Path -Path $UnpackedFolderPath -ChildPath "sources\$_") -PathType Leaf }
+if ($installImages.Count -eq 0) {
+    Write-Error "Unable to locate sources\install.wim or sources\install.esd in $UnpackedFolderPath`r`nExtract the whole ISO, not just some of its folders."
+    exit 1
+}
+if ($installImages.Count -gt 1) {
+    Write-Error "Both sources\install.wim and sources\install.esd are present in $UnpackedFolderPath. Remove the one you do not want so Setup is not left to choose."
+    exit 1
+}
+$installImage = $installImages[0]
 
 # The script does not write answer files, but it can catch a missing or broken one here, where the fix is
 # a file copy, rather than at Windows Setup, where a bad autounattend.xml is silently ignored and the install
@@ -322,6 +337,7 @@ $summary = [ordered]@{
     "ISO"          = $iso.FullName
     "Size"         = "{0:N2} GB" -f ($iso.Length / 1GB)
     "Volume label" = $VolumeLabel
+    "Install image" = "sources\$installImage"
     "UEFI boot"    = Split-Path -Path $efiBoot -Leaf
     "oscdimg"      = "$oscdimgSource, $localOSCDPath"
     "oscdimg hash" = (Get-FileHash -Path $localOSCDPath -Algorithm SHA256).Hash
@@ -347,8 +363,8 @@ exit 0
 # SIG # Begin signature block
 # MIIQ4QYJKoZIhvcNAQcCoIIQ0jCCEM4CAQExDzANBglghkgBZQMEAgEFADB5Bgor
 # BgEEAYI3AgEEoGswaTA0BgorBgEEAYI3AgEeMCYCAwEAAAQQH8w7YFlLCE63JNLG
-# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCCdnXWwELTXTLej
-# QIIzrQaoZFdJMEbWutkyG17kbDF3waCCDSYwggWgMIIEiKADAgECAhMSAAAGp51a
+# KX7zUQIBAAIBAAIBAAIBAAIBADAxMA0GCWCGSAFlAwQCAQUABCAzG3wNNZfSIA8I
+# +FHxD86qE0+C8RwcG6m4SpWvjSXNRqCCDSYwggWgMIIEiKADAgECAhMSAAAGp51a
 # CZ27OHNaAAIAAAanMA0GCSqGSIb3DQEBCwUAMEcxEjAQBgoJkiaJk/IsZAEZFgJj
 # YTEUMBIGCgmSJomT8ixkARkWBG5haXQxGzAZBgNVBAMTEk5BSVQgRW50ZXJwcmlz
 # ZSBDQTAeFw0yNDAxMTgxODM0MzZaFw0yOTAxMTYxODM0MzZaMEgxEjAQBgoJkiaJ
@@ -423,17 +439,17 @@ exit 0
 # BAMTE05BSVQgU3Vib3JkaW5hdGUgQ0ECExkBUcYvYP5WFMgEx20ABgFRxi8wDQYJ
 # YIZIAWUDBAIBBQCggYQwGAYKKwYBBAGCNwIBDDEKMAigAoAAoQKAADAZBgkqhkiG
 # 9w0BCQMxDAYKKwYBBAGCNwIBBDAcBgorBgEEAYI3AgELMQ4wDAYKKwYBBAGCNwIB
-# FTAvBgkqhkiG9w0BCQQxIgQgY+ctxtuaQdu1/0AxKRiylRKDMJX1Af9yHj2h6lDK
-# jSAwDQYJKoZIhvcNAQEBBQAEggIAMSQZfohtFCyPcJMulnS611r6HcB72Q/Jg+hs
-# Bcw+EaR0WGkMRAhWAeaOfqiPPeF43x3J6MojhOvw3+XFzhnnX9CyE1CbD9/XJ6Sw
-# LRvGimo5Jdl4dS0GWPbWfKAi6TZNmr8uCGzPXXrmNIehxA7vOiNeTpQlQ9F2C8Sy
-# S+bJgrXI7H7Lwu6xEgcDl9jQrztAp0Q/9Q3lYU4FNoA4hWWPOu99+p2o16D0CxCi
-# GWNcPQ9C+iuoLEaKArP2TtD2p1Yu4y29770df6/02pnDKDZKO+z+sYW+8DZjX3z2
-# jiYmhRyqYgGa9KMrAOF/5TMyeCL9LhPNAkX1uhsFACchAxOV0jRMeU088GcMZFpg
-# Swhkp7O+R+O4Zk8NnbPVKs299mLpekXuBjrd2OmK2p5bwM6mnjXjpYx8i7+9zkfe
-# CCCQCaIgq4qThpjhFEnrprvTODPTpkHJPMYKT11D47phge1T+nGk6KApwwkjVPGK
-# wx7aTBs4n6BscbF7awnPULVUngnMUFWX7Q3EMN21XetIwYdydraqNqpFAz6RqAG/
-# PND1Xm7o/lDKGJAs+XYFR3T9AVLx4xUY4TyR84SZudxstdN8qXG+CwhWO6gXMb6v
-# UVZS2Njo9eqgSwNkZWd2K4WSZcyMvyHRffTe+2PcTWRkKMAKd4z3Lvjn6TF0BRni
-# g68koxQ=
+# FTAvBgkqhkiG9w0BCQQxIgQgNXeWLdiQEhnDir1kRvvbix9GyJLXzMrdIFc15gVB
+# XpwwDQYJKoZIhvcNAQEBBQAEggIAnX80mFrCBCnaLPYklgIU3xT1wWjutOu7Ry9m
+# iDMl9g0pS00Xd0JZZ5IQx3BNCUSWy5ZD50sOauf+NZRh8l2GxA8R8l3ft12iZo6H
+# VVRKqtK80IoiEwuHTJ8lYCpfPIMatAx5xZhcCgLhF6OcPjbSQ2jvL/xD+/vi9r6Z
+# nzwGUsCykAf4Ordmt84sPHm+VL4OXU7k3LDjcGrcZh4zkdQL3ooB2/X4fMeAH6bF
+# R8/lqZLchOwiCGQEQUog5taLX/zSki39LiS7FtDlcmj+lMXZNRPXhQrTN8EOlI41
+# uXQOHcoIMUC298gxqT9RV0lrKQpspiuhe+PRzHPHWosH+b666LkWNPurpcNufkpb
+# 5bk/sD6eSRGB9n31pA+IoDg6ykVw7E0MjR2WwHKGaeTIMIZjKLGlL6qz0psAIXLy
+# eS+tF3uawYB18J/w/1K9SdnFj5idQPOcWKQhQ19OAn7n+W476AIGc5L6F7x/W1s2
+# QHWMCid43oCac1T3i4519xo+dNYRH7PUqgI4cX0EYCpQVgNJEXloF36krm3Fa6gl
+# ItJYLPvuW4eDwzVd0rAAs2NRC95hJ+mLnWW1nV5/6w5iMtQirYPyeB22yHbKLCHs
+# p/GrVUCj4a9JORyNicZJ8tPmnw65WA7lH3+Y5e0SYUgIVcs+Yo8Rdzzxd+xRxrRn
+# DatI+C0=
 # SIG # End signature block

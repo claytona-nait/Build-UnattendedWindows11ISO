@@ -2,7 +2,7 @@
 
 Rebuilds a bootable Windows ISO from an unpacked installation folder, so an
 `autounattend.xml` dropped into the folder rides along in the image. The script
-checks that `sources\install.wim` and `sources\boot.wim` are present, finds
+checks that `sources\boot.wim` and an install image are present, finds
 `oscdimg.exe` in the Windows ADK or installs it with winget if there is no local copy,
 and calls it with the UEFI and BIOS boot configuration a Windows install media needs.
 
@@ -33,6 +33,11 @@ that reads ISO images directly, such as [7-Zip](https://www.7-zip.org/), PeaZip 
 
 With the folder named `Windows11` the script's defaults line up and it runs with no
 parameters. Any other folder name works too, you just pass it with `-UnpackedFolderPath`.
+
+The install image can be `sources\install.wim`, which retail ISOs ship, or
+`sources\install.esd`, the compressed form the Media Creation Tool produces. Windows Setup
+accepts either and the script does too, but it refuses a folder holding both, since that
+usually means a conversion was started and not finished and Setup would have to guess.
 
 The script does not write answer files, but it does look for one. If there is no
 `autounattend.xml` in the folder root it warns that the ISO will be ordinary install
